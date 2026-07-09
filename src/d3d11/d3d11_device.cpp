@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 
 #include <dxbc/dxbc_container.h>
@@ -3191,22 +3192,106 @@ namespace dxvk {
   }
 
 
-  HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateVertexShaderNvSemantics(
+  // M4.A (T-A): resolve an NVAPI custom-semantic array against the DXBC
+  // output signature of the shader being created, and log the mapping.
+  // Read-only reconnaissance: compilation behavior is unchanged in this step.
+  static void LogNvCustomSemanticMapping(
+    const char*                         ShaderType,
+    const void*                         pShaderBytecode,
+          SIZE_T                        BytecodeLength,
+    const D3D11_VK_NV_CUSTOM_SEMANTIC*  pSemantics,
+          uint32_t                      NumSemantics) {
+    dxbc_spv::dxbc::Container container(pShaderBytecode, BytecodeLength);
+
+    if (!container) {
+      Logger::warn(str::format("NvSemantics(", ShaderType, "): invalid DXBC container"));
+      return;
+    }
+
+    auto osgnChunk = container.getOutputSignatureChunk();
+
+    if (!osgnChunk) {
+      Logger::warn(str::format("NvSemantics(", ShaderType, "): no output signature chunk"));
+      return;
+    }
+
+    dxbc_spv::dxbc::Signature outputSignature(std::move(osgnChunk));
+
+    bool anyUnmatched = false;
+
+    std::stringstream msg;
+    msg << "NvSemantics(" << ShaderType << ", " << container.getHash() << "): ";
+
+    for (uint32_t i = 0; i < NumSemantics; i++) {
+      const auto& sem = pSemantics[i];
+
+      if (i)
+        msg << ", ";
+
+      msg << sem.Name << "(type=" << sem.Type << ")";
+
+      if (sem.RegisterSpecified) {
+        // Never observed with iRacing (reg=auto everywhere) - log and move on.
+        msg << " -> o" << sem.RegisterNum << " (explicit register)";
+        continue;
+      }
+
+      bool found = false;
+
+      for (auto entry = outputSignature.begin(); entry != outputSignature.end(); entry++) {
+        if (!entry->matches(sem.Name))
+          continue;
+
+        msg << (found ? " + " : " -> ")
+            << "o" << entry->getRegisterIndex()
+            << "." << entry->getComponentMask()
+            << "(semIdx=" << entry->getSemanticIndex()
+            << ",stream=" << entry->getStreamIndex() << ")";
+
+        found = true;
+      }
+
+      if (!found) {
+        msg << " -> UNMATCHED";
+        anyUnmatched = true;
+      }
+    }
+
+    Logger::info(msg.str());
+
+    // Ground truth: dump the full output-signature table for the first few
+    // shaders, plus the first few whose request had an unmatched semantic.
+    static std::atomic<int32_t> s_dumpBudget = { 8 };
+    static std::atomic<int32_t> s_unmatchedBudget = { 8 };
+
+    bool dump = s_dumpBudget.fetch_sub(1, std::memory_order_relaxed) > 0;
+
+    if (anyUnmatched && !dump)
+      dump = s_unmatchedBudget.fetch_sub(1, std::memory_order_relaxed) > 0;
+
+    if (dump) {
+      Logger::info(str::format("NvSemantics(", ShaderType, ", ",
+        container.getHash(), ") output signature:\n", outputSignature));
+    }
+  }
+  
+  
+HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateVertexShaderNvSemantics(
     const void*                     pShaderBytecode,
           SIZE_T                    BytecodeLength,
           ID3D11ClassLinkage*       pClassLinkage,
     const D3D11_VK_NV_CUSTOM_SEMANTIC* pSemantics,
           uint32_t                  NumSemantics,
           ID3D11VertexShader**      ppVertexShader) {
-    Logger::info(str::format("D3D11DeviceExt: CreateVertexShaderNvSemantics: ",
-      NumSemantics, " semantics (M1: compiling as plain VS)"));
+    LogNvCustomSemanticMapping("VS",
+      pShaderBytecode, BytecodeLength, pSemantics, NumSemantics);
 
     return m_device->CreateVertexShader(
       pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
   }
 
 
-  HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateGeometryShaderNvSemantics(
+HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateGeometryShaderNvSemantics(
     const void*                     pShaderBytecode,
           SIZE_T                    BytecodeLength,
           ID3D11ClassLinkage*       pClassLinkage,
@@ -3214,9 +3299,8 @@ namespace dxvk {
           uint32_t                  NumSemantics,
           BOOL                      UseViewportMask,
           ID3D11GeometryShader**    ppGeometryShader) {
-    Logger::info(str::format("D3D11DeviceExt: CreateGeometryShaderNvSemantics: ",
-      NumSemantics, " semantics, viewportMask=", UseViewportMask,
-      " (M1: compiling as plain GS)"));
+    LogNvCustomSemanticMapping(UseViewportMask ? "GS vpMask=1" : "GS vpMask=0",
+      pShaderBytecode, BytecodeLength, pSemantics, NumSemantics);
 
     return m_device->CreateGeometryShader(
       pShaderBytecode, BytecodeLength, pClassLinkage, ppGeometryShader);
