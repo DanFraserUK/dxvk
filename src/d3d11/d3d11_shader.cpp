@@ -348,13 +348,11 @@ namespace dxvk {
   }
 
 
-Rc<DxvkShader> D3D11CommonShader::GetOrCreateNvAmplificationGs(
+  Rc<DxvkShader> D3D11CommonShader::GetOrCreateNvAmplificationGs(
           D3D11Device*            pDevice,
     const DxvkShaderHash&         VsKey,
           uint32_t                NumViews) const {
-    Logger::info(str::format("TEMPDIAG: GetOrCreateNvAmplificationGs ENTER, about to lock, key=", VsKey.toString()));
     std::lock_guard lock(*m_nvAmplificationMutex);
-    Logger::info(str::format("TEMPDIAG: GetOrCreateNvAmplificationGs lock acquired, key=", VsKey.toString()));
 
     if (*m_nvAmplificationGs != nullptr) {
       static std::atomic<int32_t> s_reuseLogBudget = { 8 };
@@ -363,7 +361,6 @@ Rc<DxvkShader> D3D11CommonShader::GetOrCreateNvAmplificationGs(
         Logger::info(str::format("NvAmplificationGs: reusing cached companion for ",
           VsKey.toString(), " (", m_nvPassthroughIo.size(), " passthrough entries)"));
       }
-      Logger::info(str::format("TEMPDIAG: GetOrCreateNvAmplificationGs RETURN (cache hit), key=", VsKey.toString()));
       return *m_nvAmplificationGs;
     }
 
@@ -374,12 +371,9 @@ Rc<DxvkShader> D3D11CommonShader::GetOrCreateNvAmplificationGs(
     Rc<D3D11NvAmplificationGsConverter> converter =
       new D3D11NvAmplificationGsConverter(VsKey, m_nvPassthroughIo, NumViews);
 
-    Logger::info(str::format("TEMPDIAG: about to call createCachedShader, key=", VsKey.toString()));
     *m_nvAmplificationGs = pDevice->GetDXVKDevice()->createCachedShader(
       VsKey.toString() + "_nvAmpGs", DxvkIrShaderCreateInfo(), std::move(converter));
-    Logger::info(str::format("TEMPDIAG: createCachedShader RETURNED, key=", VsKey.toString()));
 
-    Logger::info(str::format("TEMPDIAG: GetOrCreateNvAmplificationGs RETURN (built), key=", VsKey.toString()));
     return *m_nvAmplificationGs;
   }
 

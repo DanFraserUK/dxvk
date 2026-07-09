@@ -1419,15 +1419,12 @@ namespace dxvk {
               " passthrough entries, ", liveNumViews, " live views)"));
           }
 
-          Logger::info(str::format("TEMPDIAG: VSSetShader about to call GetOrCreateNvAmplificationGs"));
           auto ampGs = commonShader->GetOrCreateNvAmplificationGs(
             m_parent, commonShader->GetShaderKey(), liveNumViews);
-          Logger::info(str::format("TEMPDIAG: VSSetShader GetOrCreateNvAmplificationGs returned"));
 
           EmitCs([cShader = ampGs] (DxvkContext* ctx) {
             ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(Rc<DxvkShader>(cShader));
           });
-          Logger::info(str::format("TEMPDIAG: VSSetShader EmitCs enqueued"));
         }
       }
     }
