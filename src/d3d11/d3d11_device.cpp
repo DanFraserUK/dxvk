@@ -2933,7 +2933,7 @@ namespace dxvk {
         return deviceFeatures.nvxBinaryImport;
       
       case D3D11_VK_NV_MULTIVIEW:
-        return TRUE;   // M3 replaces this with a real feature check
+        return deviceFeatures.nvViewportArray2;
 
       default:
         return false;
