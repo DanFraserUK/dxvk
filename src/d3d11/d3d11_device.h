@@ -492,6 +492,7 @@ namespace dxvk {
             SIZE_T                  BytecodeLength,
             ID3D11ClassLinkage*     pClassLinkage,
       const DxvkNvMultiviewInfo&    NvMultiview,
+            std::vector<DxvkNvPassthroughIoEntry> PassthroughIo,
             ID3D11VertexShader**    ppVertexShader);
 
     HRESULT CreateGeometryShaderNvMultiview(
@@ -499,6 +500,7 @@ namespace dxvk {
             SIZE_T                  BytecodeLength,
             ID3D11ClassLinkage*     pClassLinkage,
       const DxvkNvMultiviewInfo&    NvMultiview,
+            std::vector<DxvkNvPassthroughIoEntry> PassthroughIo,
             ID3D11GeometryShader**  ppGeometryShader);
     
   private:

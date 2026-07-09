@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 
@@ -155,6 +156,47 @@ namespace dxvk {
     Rc<DxvkShader> GetShader() const {
       return m_shader;
     }
+    
+    /**
+     * \brief NV multi-view pass-through IO list (M4.C)
+     *
+     * Empty for shaders with no NV multi-view metadata. Filled once,
+     * at creation time, from the same signature walk that resolves NV
+     * custom semantics - never re-read from bytecode.
+     */
+    const std::vector<DxvkNvPassthroughIoEntry>& GetNvPassthroughIo() const {
+      return m_nvPassthroughIo;
+    }
+
+    void SetNvPassthroughIo(std::vector<DxvkNvPassthroughIoEntry>&& io) {
+      m_nvPassthroughIo = std::move(io);
+    }
+
+    /**
+     * \brief Shader key this object was created with (M4.C)
+     *
+     * Nothing on DxvkShader/DxvkIrShader hands this back once creation
+     * is done - kept here since GetOrCreateNvAmplificationGs needs it.
+     */
+    DxvkShaderHash GetShaderKey() const {
+      return m_shaderKey;
+    }
+
+    /**
+     * \brief Gets or builds (only when needed) this VS's NV multi-view broadcast GS
+     *
+     * M4.C (T-C): only means something when this shader is a vertex
+     * shader with nvMultiview metadata and no app-bound GS. Built once;
+     * shared by every copy of this object (see the shared_ptr cache
+     * slot below - D3D11ShaderModuleSet::GetShaderModule, pre-existing
+     * DXVK code, hands this object back by copy on both a cache hit and
+     * a cache miss, so the cache slot itself has to be something a copy
+     * can still share, the same reasoning as the mutex right below it).
+     */
+    Rc<DxvkShader> GetOrCreateNvAmplificationGs(
+            D3D11Device*            pDevice,
+      const DxvkShaderHash&         VsKey,
+            uint32_t                NumViews) const;
 
     DxvkBufferSlice GetIcb() const {
       return m_buffer != nullptr
@@ -180,6 +222,11 @@ namespace dxvk {
 
     Rc<DxvkShader> m_shader;
     Rc<DxvkBuffer> m_buffer;
+
+    std::vector<DxvkNvPassthroughIoEntry> m_nvPassthroughIo;
+    DxvkShaderHash                        m_shaderKey;
+    std::shared_ptr<Rc<DxvkShader>>       m_nvAmplificationGs    = std::make_shared<Rc<DxvkShader>>();
+    std::shared_ptr<dxvk::mutex>          m_nvAmplificationMutex = std::make_shared<dxvk::mutex>();
 
     D3D11BindingMask    m_bindings = { };
     D3D11InterfaceInfo  m_interfaces = { };

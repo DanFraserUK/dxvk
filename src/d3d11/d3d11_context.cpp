@@ -1387,6 +1387,47 @@ namespace dxvk {
 
       BindShader<D3D11ShaderType::eVertex>(GetCommonShader(shader));
     }
+
+    // M4.C (T-C): if this VS carries NV multi-view metadata, the live
+    // toggle says multi-view is truly on right now (not just true at
+    // shader-creation time - iRacing tags shaders with this metadata
+    // no matter the toggle, so checking the metadata alone would fire
+    // the broadcast in single-screen play too), and the app has NOT
+    // bound its own GS, quietly attach the built broadcast GS. If the
+    // app HAS bound a GS (the 15 vpMask=1 shaders), it already carries
+    // its own nvMultiview metadata and broadcasting it is T-C.2 -
+    // untouched here.
+    if (shader && !m_state.gs) {
+      auto* commonShader = GetCommonShader(shader);
+
+      if (commonShader != nullptr) {
+        auto dxvkShader = commonShader->GetShader();
+        auto irShader = dxvkShader != nullptr
+          ? static_cast<DxvkIrShader*>(dxvkShader.ptr())
+          : nullptr;
+        bool hasNvMultiview = irShader != nullptr
+          && irShader->getShaderCreateInfo().nvMultiview.enabled();
+
+        uint32_t liveNumViews = GetNvMultiviewNumViews();
+
+        if (hasNvMultiview && liveNumViews > 1u) {
+          static std::atomic<int32_t> s_attachLogBudget = { 8 };
+
+          if (s_attachLogBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
+            Logger::info(str::format("NvAmplificationGs: auto-attach for VS ",
+              dxvkShader->debugName(), " (", commonShader->GetNvPassthroughIo().size(),
+              " passthrough entries, ", liveNumViews, " live views)"));
+          }
+
+          auto ampGs = commonShader->GetOrCreateNvAmplificationGs(
+            m_parent, commonShader->GetShaderKey(), liveNumViews);
+
+          EmitCs([cShader = ampGs] (DxvkContext* ctx) {
+            ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(Rc<DxvkShader>(cShader));
+          });
+        }
+      }
+    }
   }
 
 

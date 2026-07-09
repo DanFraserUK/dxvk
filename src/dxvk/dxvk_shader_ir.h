@@ -17,7 +17,21 @@
 
 namespace dxvk {
 
-    /**
+  /**
+   * \brief One pass-through IO register for the M4.C amplification GS
+   *
+   * Caught once, at VS creation time, from the same output-signature
+   * walk that resolves NV custom semantics - never the NV interop
+   * registers themselves (position-view family, viewport masks), only
+   * the plain registers a rasterizer/PS reads.
+   */
+  struct DxvkNvPassthroughIoEntry {
+    uint32_t                regIndex = 0u;
+    dxbc_spv::ir::BasicType  type     = dxbc_spv::ir::BasicType();
+  };
+
+
+  /**
    * \brief NVAPI multi-view semantic mapping
    *
    * Output registers resolved from the DXBC output signature of a shader

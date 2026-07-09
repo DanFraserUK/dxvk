@@ -815,6 +815,7 @@ namespace dxvk {
           SIZE_T                  BytecodeLength,
           ID3D11ClassLinkage*     pClassLinkage,
     const DxvkNvMultiviewInfo&    NvMultiview,
+          std::vector<DxvkNvPassthroughIoEntry> PassthroughIo,
           ID3D11VertexShader**    ppVertexShader) {
     InitReturnPtr(ppVertexShader);
     D3D11CommonShader module;
@@ -829,6 +830,8 @@ namespace dxvk {
 
     if (FAILED(hr))
       return hr;
+
+    module.SetNvPassthroughIo(std::move(PassthroughIo));
 
     if (!ppVertexShader)
       return S_FALSE;
@@ -869,6 +872,7 @@ namespace dxvk {
           SIZE_T                  BytecodeLength,
           ID3D11ClassLinkage*     pClassLinkage,
     const DxvkNvMultiviewInfo&    NvMultiview,
+          std::vector<DxvkNvPassthroughIoEntry> PassthroughIo,
           ID3D11GeometryShader**  ppGeometryShader) {
     InitReturnPtr(ppGeometryShader);
     D3D11CommonShader module;
@@ -883,6 +887,8 @@ namespace dxvk {
 
     if (FAILED(hr))
       return hr;
+
+    module.SetNvPassthroughIo(std::move(PassthroughIo));
 
     if (!ppGeometryShader)
       return S_FALSE;
@@ -3282,7 +3288,8 @@ namespace dxvk {
     const void*                         pShaderBytecode,
           SIZE_T                        BytecodeLength,
     const D3D11_VK_NV_CUSTOM_SEMANTIC*  pSemantics,
-          uint32_t                      NumSemantics) {
+          uint32_t                      NumSemantics,
+          std::vector<DxvkNvPassthroughIoEntry>* pPassthroughIo = nullptr) {
     DxvkNvMultiviewInfo result = { };
 
     dxbc_spv::dxbc::Container container(pShaderBytecode, BytecodeLength);
@@ -3306,6 +3313,33 @@ namespace dxvk {
       "NV_POSITION_VIEW_2_SEMANTIC",
       "NV_POSITION_VIEW_3_SEMANTIC",
     }};
+
+    if (pPassthroughIo) {
+      static const std::array<const char*, 5> s_nvInteropNamesForFilter = {{
+        "NV_POSITION_VIEW_1_SEMANTIC", "NV_POSITION_VIEW_2_SEMANTIC",
+        "NV_POSITION_VIEW_3_SEMANTIC", "NV_VIEWPORT_MASK",
+        "NV_VIEWPORT_MASK_2_SEMANTIC",
+      }};
+
+      for (auto e = outputSignature.begin(); e != outputSignature.end(); e++) {
+        bool isNvInterop = false;
+
+        for (auto name : s_nvInteropNamesForFilter) {
+          if (e->matches(name))
+            isNvInterop = true;
+        }
+
+        if (!isNvInterop) {
+          pPassthroughIo->push_back({
+            uint32_t(e->getRegisterIndex()), e->getVectorType()
+          });
+        }
+      }
+
+      Logger::info(str::format("NvSemantics(", ShaderType, ", ",
+        container.getHash(), "): captured ", pPassthroughIo->size(),
+        " passthrough IO entries for amplification"));
+    }
 
     std::stringstream msg;
     msg << "NvSemantics(" << ShaderType << ", " << container.getHash() << "):";
@@ -3359,8 +3393,9 @@ namespace dxvk {
     const D3D11_VK_NV_CUSTOM_SEMANTIC* pSemantics,
           uint32_t                  NumSemantics,
           ID3D11VertexShader**      ppVertexShader) {
+    std::vector<DxvkNvPassthroughIoEntry> passthroughIo;
     DxvkNvMultiviewInfo nv = ResolveNvCustomSemantics("VS",
-      pShaderBytecode, BytecodeLength, pSemantics, NumSemantics);
+      pShaderBytecode, BytecodeLength, pSemantics, NumSemantics, &passthroughIo);
 
     if (!nv.enabled()) {
       // Nothing multi-view in this signature: plain compile, as before.
@@ -3369,7 +3404,8 @@ namespace dxvk {
     }
 
     return m_device->CreateVertexShaderNvMultiview(
-      pShaderBytecode, BytecodeLength, pClassLinkage, nv, ppVertexShader);
+      pShaderBytecode, BytecodeLength, pClassLinkage, nv,
+      std::move(passthroughIo), ppVertexShader);
   }
 
 
@@ -3381,9 +3417,10 @@ namespace dxvk {
           uint32_t                  NumSemantics,
           BOOL                      UseViewportMask,
           ID3D11GeometryShader**    ppGeometryShader) {
+    std::vector<DxvkNvPassthroughIoEntry> passthroughIo;
     DxvkNvMultiviewInfo nv = ResolveNvCustomSemantics(
       UseViewportMask ? "GS vpMask=1" : "GS vpMask=0",
-      pShaderBytecode, BytecodeLength, pSemantics, NumSemantics);
+      pShaderBytecode, BytecodeLength, pSemantics, NumSemantics, &passthroughIo);
     nv.useViewportMask = UseViewportMask ? 1u : 0u;
 
     if (!nv.enabled()) {
@@ -3394,7 +3431,8 @@ namespace dxvk {
     }
 
     return m_device->CreateGeometryShaderNvMultiview(
-      pShaderBytecode, BytecodeLength, pClassLinkage, nv, ppGeometryShader);
+      pShaderBytecode, BytecodeLength, pClassLinkage, nv,
+      std::move(passthroughIo), ppGeometryShader);
   }
 
 

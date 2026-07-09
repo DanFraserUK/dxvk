@@ -10,6 +10,112 @@
 
 namespace dxvk {
 
+  // M4.C (T-C): builds a geometry shader that never lived in
+  // iRacing's bytecode - sends one input shape out to NumViews
+  // viewports through GS instancing (SetGsInstances + gl_InvocationID),
+  // passing every plain VS output through UNCHANGED (view-0 position
+  // for every view; per-view positions are T-D's job). Scope: triangle
+  // input shape only (§0 above - matches every M4.A-marked shader;
+  // no point/line multi-view VS seen in recon).
+  //
+  // On purpose, this does NOT touch dxbc-spirv: DxvkIrShaderConverter is
+  // DXVK's own interface (dxvk_shader_ir.h) - anything that fills in an
+  // ir::Builder fits the bill, hand-built or turned from DXBC alike.
+  class D3D11NvAmplificationGsConverter : public DxvkIrShaderConverter {
+
+  public:
+
+    D3D11NvAmplificationGsConverter(
+      const DxvkShaderHash&                        VsKey,
+      std::vector<DxvkNvPassthroughIoEntry>        PassthroughIo,
+            uint32_t                                NumViews)
+    : m_key(VsKey), m_passthroughIo(std::move(PassthroughIo)), m_numViews(NumViews) { }
+
+    void convertShader(dxbc_spv::ir::Builder& builder) override {
+      using namespace dxbc_spv;
+
+      auto mainFunc = builder.add(ir::Op::Function(ir::ScalarType::eVoid));
+      builder.add(ir::Op::FunctionEnd());
+      builder.add(ir::Op::DebugName(mainFunc, "main"));
+
+      auto entryPoint = builder.addAfter(ir::SsaDef(),
+        ir::Op::EntryPoint(mainFunc, ir::ShaderStage::eGeometry));
+
+      auto debugName = m_key.toString() + "_nvAmpGs";
+      builder.add(ir::Op::DebugName(entryPoint, debugName.c_str()));
+      builder.setCursor(mainFunc);
+
+      builder.add(ir::Op::SetGsInstances(entryPoint, m_numViews));
+      builder.add(ir::Op::SetGsInputPrimitive(entryPoint, ir::PrimitiveType::eTriangles));
+      builder.add(ir::Op::SetGsOutputPrimitive(entryPoint, ir::PrimitiveType::eTriangles, 0x1u));
+      builder.add(ir::Op::SetGsOutputVertices(entryPoint, 3u));
+
+      auto instanceIdDecl = builder.add(ir::Op::DclInputBuiltIn(
+        ir::ScalarType::eU32, entryPoint, ir::BuiltIn::eGsInstanceId, ir::InterpolationModes()));
+      auto viewportDecl = builder.add(ir::Op::DclOutputBuiltIn(
+        ir::Type(ir::ScalarType::eU32), entryPoint, ir::BuiltIn::eViewportIndex));
+
+      auto instanceId = builder.add(ir::Op::InputLoad(
+        ir::ScalarType::eU32, instanceIdDecl, ir::SsaDef()));
+      builder.add(ir::Op::OutputStore(viewportDecl, ir::SsaDef(), instanceId));
+
+      // Per-vertex pass-through: 3 input vertices (triangle), every
+      // captured entry carried through unchanged, at its OWN component
+      // count (the resolver's getVectorType() - never a fixed float4).
+      for (const auto& io : m_passthroughIo) {
+        // INPUT must be shaped "3 of these," one slot per triangle
+        // corner - that's what makes reading with v=0,1,2 mean "corner
+        // 0/1/2" rather than "piece 0/1/2 of one value." A geometry
+        // shader always reads its per-vertex inputs this way; leaving
+        // this shape off is a real trap, worth reading §11 for. OUTPUT
+        // stays a single value: one write per EmitVertex, never an
+        // array.
+        auto inputType = ir::Type(io.type).addArrayDimension(3u);
+
+        auto inDecl = builder.add(ir::Op::DclInput(
+          inputType, entryPoint, io.regIndex, 0u));
+        auto outDecl = builder.add(ir::Op::DclOutput(
+          ir::Type(io.type), entryPoint, io.regIndex, 0u));
+
+        for (uint32_t v = 0u; v < 3u; v++) {
+          auto value = builder.add(ir::Op::InputLoad(
+            ir::Type(io.type), inDecl, builder.makeConstant(v)));
+          builder.add(ir::Op::OutputStore(outDecl, ir::SsaDef(), value));
+        }
+      }
+
+      for (uint32_t v = 0u; v < 3u; v++)
+        builder.add(ir::Op::EmitVertex(0u));
+    }
+
+    uint32_t determineResourceIndex(
+            dxbc_spv::ir::ShaderStage stage,
+            dxbc_spv::ir::ScalarType  type,
+            uint32_t                  regSpace,
+            uint32_t                  regIndex) const override {
+      // This converter states no resource bindings at all (no CBV/
+      // SRV/UAV/sampler - only IO pass-through and one builtin write),
+      // so this should never actually be called. A harmless answer if
+      // it ever is.
+      return regIndex;
+    }
+
+    void dumpSource(const std::string& path) const override {
+      // No DXBC source behind a hand-built converter - nothing to dump.
+    }
+
+    std::string getDebugName() const override {
+      return m_key.toString() + "_nvAmpGs";
+    }
+
+  private:
+
+    DxvkShaderHash                          m_key;
+    std::vector<DxvkNvPassthroughIoEntry>   m_passthroughIo;
+    uint32_t                                m_numViews;
+
+  };
+
   class D3D11ShaderConverter : public DxvkIrShaderConverter {
 
   public:
@@ -230,6 +336,7 @@ namespace dxvk {
     const D3D11ShaderIcbInfo&     Icb,
     const D3D11BindingMask&       BindingMask)
   : m_bindings(BindingMask) {
+    m_shaderKey = ShaderKey;
     if (Logger::logLevel() <= LogLevel::Debug)
       Logger::debug(str::format("Compiling shader ", ShaderKey.toString()));
 
@@ -238,6 +345,36 @@ namespace dxvk {
 
     CreateIrShader(pDevice, ShaderKey, ModuleInfo, pShaderBytecode, BytecodeLength, Icb);
     pDevice->GetDXVKDevice()->registerShader(m_shader);
+  }
+
+
+  Rc<DxvkShader> D3D11CommonShader::GetOrCreateNvAmplificationGs(
+          D3D11Device*            pDevice,
+    const DxvkShaderHash&         VsKey,
+          uint32_t                NumViews) const {
+    std::lock_guard lock(*m_nvAmplificationMutex);
+
+    if (*m_nvAmplificationGs != nullptr) {
+      static std::atomic<int32_t> s_reuseLogBudget = { 8 };
+
+      if (s_reuseLogBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
+        Logger::info(str::format("NvAmplificationGs: reusing cached companion for ",
+          VsKey.toString(), " (", m_nvPassthroughIo.size(), " passthrough entries)"));
+      }
+      return *m_nvAmplificationGs;
+    }
+
+    Logger::info(str::format("NvAmplificationGs: building companion for ",
+      VsKey.toString(), " (", m_nvPassthroughIo.size(), " passthrough entries, ",
+      NumViews, " views)"));
+
+    Rc<D3D11NvAmplificationGsConverter> converter =
+      new D3D11NvAmplificationGsConverter(VsKey, m_nvPassthroughIo, NumViews);
+
+    *m_nvAmplificationGs = pDevice->GetDXVKDevice()->createCachedShader(
+      VsKey.toString() + "_nvAmpGs", DxvkIrShaderCreateInfo(), std::move(converter));
+
+    return *m_nvAmplificationGs;
   }
 
 
