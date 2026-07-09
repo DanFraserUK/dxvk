@@ -7,9 +7,15 @@
 
 namespace dxvk {
 
+  // TEMPDIAG2: millisecond timestamp helper, for measuring real elapsed time
+  // around the three infinite-timeout vkAcquireNextImageKHR calls below.
+  static int64_t tempdiag2_now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+
   const std::array<std::pair<VkColorSpaceKHR, VkColorSpaceKHR>, 2> Presenter::s_colorSpaceFallbacks = {{
     { VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, VK_COLOR_SPACE_HDR10_ST2084_EXT },
-
     { VK_COLOR_SPACE_HDR10_ST2084_EXT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT },
   }};
 
@@ -97,15 +103,16 @@ namespace dxvk {
 
     updateSwapChain();
 
-    // Don't acquire if we already did so after present
-    if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
+if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
       PresenterSync sync = m_semaphores.at(m_frameIndex);
 
       waitForSwapchainFence(sync);
 
+      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-A about to call vkAcquireNextImageKHR"));
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         sync.acquire, VK_NULL_HANDLE, &m_imageIndex);
+      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-A returned, status=", m_acquireStatus));
     }
 
     // This is a normal occurence, but may be useful for
@@ -125,11 +132,13 @@ namespace dxvk {
       if (vr != VK_SUCCESS)
         return softError(vr);
 
-      PresenterSync sync = m_semaphores.at(m_frameIndex);
+PresenterSync sync = m_semaphores.at(m_frameIndex);
 
+      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-B about to call vkAcquireNextImageKHR"));
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         sync.acquire, VK_NULL_HANDLE, &m_imageIndex);
+      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-B returned, status=", m_acquireStatus));
 
       if (m_acquireStatus < 0) {
         Logger::info(str::format("Presenter: Got ", m_acquireStatus, " from fresh swapchain"));
@@ -247,13 +256,15 @@ namespace dxvk {
 
     // On a successful present, try to acquire next image already, in
     // order to hide potential delays from the application thread.
-    if (status == VK_SUCCESS) {
+if (status == VK_SUCCESS) {
       PresenterSync& nextSync = m_semaphores.at(m_frameIndex);
       waitForSwapchainFence(nextSync);
 
+      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-C about to call vkAcquireNextImageKHR"));
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         nextSync.acquire, VK_NULL_HANDLE, &m_imageIndex);
+      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-C returned, status=", m_acquireStatus));
     }
 
     // Recreate the swapchain on the next acquire, even if we get suboptimal.
