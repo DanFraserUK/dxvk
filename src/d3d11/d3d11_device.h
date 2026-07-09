@@ -639,6 +639,23 @@ namespace dxvk {
             const D3D11_SAMPLER_DESC* pSamplerDesc,
             ID3D11SamplerState**      ppSamplerState,
             uint32_t*                 pDriverHandle);
+
+HRESULT STDMETHODCALLTYPE CreateVertexShaderNvSemantics(
+      const void*                     pShaderBytecode,
+            SIZE_T                    BytecodeLength,
+            ID3D11ClassLinkage*       pClassLinkage,
+      const D3D11_VK_NV_CUSTOM_SEMANTIC* pSemantics,
+            uint32_t                  NumSemantics,
+            ID3D11VertexShader**      ppVertexShader) override;
+
+    HRESULT STDMETHODCALLTYPE CreateGeometryShaderNvSemantics(
+      const void*                     pShaderBytecode,
+            SIZE_T                    BytecodeLength,
+            ID3D11ClassLinkage*       pClassLinkage,
+      const D3D11_VK_NV_CUSTOM_SEMANTIC* pSemantics,
+            uint32_t                  NumSemantics,
+            BOOL                      UseViewportMask,
+            ID3D11GeometryShader**    ppGeometryShader) override;
     
   private:
     
