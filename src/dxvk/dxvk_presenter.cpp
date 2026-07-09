@@ -103,16 +103,14 @@ namespace dxvk {
 
     updateSwapChain();
 
-if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
+    if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
       PresenterSync sync = m_semaphores.at(m_frameIndex);
 
       waitForSwapchainFence(sync);
 
-      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-A about to call vkAcquireNextImageKHR"));
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         sync.acquire, VK_NULL_HANDLE, &m_imageIndex);
-      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-A returned, status=", m_acquireStatus));
     }
 
     // This is a normal occurence, but may be useful for
@@ -132,13 +130,11 @@ if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
       if (vr != VK_SUCCESS)
         return softError(vr);
 
-PresenterSync sync = m_semaphores.at(m_frameIndex);
+      PresenterSync sync = m_semaphores.at(m_frameIndex);
 
-      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-B about to call vkAcquireNextImageKHR"));
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         sync.acquire, VK_NULL_HANDLE, &m_imageIndex);
-      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-B returned, status=", m_acquireStatus));
 
       if (m_acquireStatus < 0) {
         Logger::info(str::format("Presenter: Got ", m_acquireStatus, " from fresh swapchain"));
@@ -218,8 +214,10 @@ PresenterSync sync = m_semaphores.at(m_frameIndex);
       fenceInfo.pNext = const_cast<void*>(std::exchange(info.pNext, &fenceInfo));
     }
 
+    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: PRESENT about to call vkQueuePresentKHR"));
     VkResult status = m_vkd->vkQueuePresentKHR(
       m_device->queues().graphics.queueHandle, &info);
+    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: PRESENT returned, status=", status));
 
     // Maintain valid state if presentation succeeded, even if we want to
     // recreate the swapchain. Spec says that 'queue' operations, i.e. the
@@ -256,15 +254,13 @@ PresenterSync sync = m_semaphores.at(m_frameIndex);
 
     // On a successful present, try to acquire next image already, in
     // order to hide potential delays from the application thread.
-if (status == VK_SUCCESS) {
+    if (status == VK_SUCCESS) {
       PresenterSync& nextSync = m_semaphores.at(m_frameIndex);
       waitForSwapchainFence(nextSync);
 
-      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-C about to call vkAcquireNextImageKHR"));
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         nextSync.acquire, VK_NULL_HANDLE, &m_imageIndex);
-      Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: ACQUIRE-C returned, status=", m_acquireStatus));
     }
 
     // Recreate the swapchain on the next acquire, even if we get suboptimal.
