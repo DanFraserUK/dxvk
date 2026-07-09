@@ -172,10 +172,21 @@ ID3D11VkExtContext1 : public ID3D11VkExtContext {
  * Mirrors the information from NVAPI's NV_CUSTOM_SEMANTIC without
  * depending on NVIDIA headers. Type values match NV_CUSTOM_SEMANTIC_TYPE
  * (2 = viewport mask, 4 = viewport mask 2, 5 = per-view position).
+ *
+ * Name[256] matches NVIDIA's own NVCustomSemanticNameString buffer size
+ * exactly (NV_CUSTOM_SEMANTIC's real name field is 256 bytes) - not the
+ * shorter 64 an earlier pass of this guide used. Every semantic name
+ * actually seen from iRacing (e.g. NV_VIEWPORT_MASK_2_SEMANTIC, 27
+ * characters) fits comfortably either way, but matching NVIDIA's true
+ * maximum here removes any theoretical truncation risk for names this
+ * guide hasn't seen yet, and lets the compiler prove the Edit 2.3
+ * strncpy calls below can never truncate - which is what makes the
+ * `-Wstringop-truncation` warning on those calls go away for good,
+ * rather than just being silenced.
  */
 struct D3D11_VK_NV_CUSTOM_SEMANTIC {
   uint32_t Type;
-  char     Name[64];
+  char     Name[256];
   BOOL     RegisterSpecified;
   uint32_t RegisterNum;
   uint32_t RegisterMask;
