@@ -17,6 +17,21 @@ namespace dxvk {
   : m_ctx(pContext) {
     
   }
+
+
+  template<typename ContextType>
+  void STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::SetMultiviewModeNV(
+          uint32_t                NumViews,
+          BOOL                    IndependentViewportMask) {
+    // M1: observe only. M4 turns this into real per-draw state.
+    static thread_local uint32_t s_lastNumViews = ~0u;
+
+    if (NumViews != s_lastNumViews) {
+      s_lastNumViews = NumViews;
+      Logger::info(str::format("D3D11DeviceContextExt: SetMultiviewModeNV: numViews=",
+        NumViews, " independentMask=", IndependentViewportMask, " (M1: no-op)"));
+    }
+  }
   
   
   template<typename ContextType>

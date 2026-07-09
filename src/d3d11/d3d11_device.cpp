@@ -2931,6 +2931,9 @@ namespace dxvk {
 
       case D3D11_VK_NVX_BINARY_IMPORT:
         return deviceFeatures.nvxBinaryImport;
+      
+      case D3D11_VK_NV_MULTIVIEW:
+        return TRUE;   // M3 replaces this with a real feature check
 
       default:
         return false;
@@ -3185,6 +3188,38 @@ namespace dxvk {
     // will need to look-up sampler from uint32 handle later
     AddSamplerAndHandleNVX(*ppSamplerState, *pDriverHandle);
     return true;
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateVertexShaderNvSemantics(
+    const void*                     pShaderBytecode,
+          SIZE_T                    BytecodeLength,
+          ID3D11ClassLinkage*       pClassLinkage,
+    const D3D11_VK_NV_CUSTOM_SEMANTIC* pSemantics,
+          uint32_t                  NumSemantics,
+          ID3D11VertexShader**      ppVertexShader) {
+    Logger::info(str::format("D3D11DeviceExt: CreateVertexShaderNvSemantics: ",
+      NumSemantics, " semantics (M1: compiling as plain VS)"));
+
+    return m_device->CreateVertexShader(
+      pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateGeometryShaderNvSemantics(
+    const void*                     pShaderBytecode,
+          SIZE_T                    BytecodeLength,
+          ID3D11ClassLinkage*       pClassLinkage,
+    const D3D11_VK_NV_CUSTOM_SEMANTIC* pSemantics,
+          uint32_t                  NumSemantics,
+          BOOL                      UseViewportMask,
+          ID3D11GeometryShader**    ppGeometryShader) {
+    Logger::info(str::format("D3D11DeviceExt: CreateGeometryShaderNvSemantics: ",
+      NumSemantics, " semantics, viewportMask=", UseViewportMask,
+      " (M1: compiling as plain GS)"));
+
+    return m_device->CreateGeometryShader(
+      pShaderBytecode, BytecodeLength, pClassLinkage, ppGeometryShader);
   }
 
 
@@ -3859,7 +3894,8 @@ namespace dxvk {
     }
     
     if (riid == __uuidof(ID3D11VkExtDevice)
-     || riid == __uuidof(ID3D11VkExtDevice1)) {
+     || riid == __uuidof(ID3D11VkExtDevice1)
+     || riid == __uuidof(ID3D11VkExtDevice2)) {
       *ppvObject = ref(&m_d3d11DeviceExt);
       return S_OK;
     }
