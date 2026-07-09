@@ -486,6 +486,20 @@ namespace dxvk {
 
       return barrierControl;
     }
+
+    HRESULT CreateVertexShaderNvMultiview(
+      const void*                   pShaderBytecode,
+            SIZE_T                  BytecodeLength,
+            ID3D11ClassLinkage*     pClassLinkage,
+      const DxvkNvMultiviewInfo&    NvMultiview,
+            ID3D11VertexShader**    ppVertexShader);
+
+    HRESULT CreateGeometryShaderNvMultiview(
+      const void*                   pShaderBytecode,
+            SIZE_T                  BytecodeLength,
+            ID3D11ClassLinkage*     pClassLinkage,
+      const DxvkNvMultiviewInfo&    NvMultiview,
+            ID3D11GeometryShader**  ppGeometryShader);
     
   private:
     
@@ -540,6 +554,12 @@ namespace dxvk {
       const UINT*                   pBufferStrides,
             UINT                    NumStrides,
             UINT                    RasterizedStream);
+
+    DxvkShaderHash ComputeShaderKey(
+            VkShaderStageFlagBits   Stage,
+      const void*                   pShaderBytecode,
+            size_t                  BytecodeLength,
+      const DxvkNvMultiviewInfo&    NvMultiview);
 
     HRESULT GetFormatSupportFlags(
             DXGI_FORMAT             Format,

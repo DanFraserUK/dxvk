@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <string>
 #include <vector>
@@ -16,6 +17,32 @@
 
 namespace dxvk {
 
+    /**
+   * \brief NVAPI multi-view semantic mapping
+   *
+   * Output registers resolved from the DXBC output signature of a shader
+   * created through the NVAPI extended entry points (dxvk-nvapi interop).
+   * View 0's position is SV_POSITION; views 1-3 ride the
+   * NV_POSITION_VIEW_{1,2,3}_SEMANTIC outputs. Register indices are -1
+   * when the corresponding output is not present. Trivially copyable and
+   * padding-free by construction: hash() and eq() operate on raw bytes.
+   */
+  struct DxvkNvMultiviewInfo {
+    /// NV_POSITION_VIEW_{1,2,3}_SEMANTIC output registers
+    std::array<int32_t, 3> positionViewReg = { -1, -1, -1 };
+    /// NV_VIEWPORT_MASK output register (u32x4, one lane per view 0-3)
+    int32_t viewportMaskReg = -1;
+    /// NV_VIEWPORT_MASK_2_SEMANTIC output register (u32x4, views 4-7)
+    int32_t viewportMask2Reg = -1;
+    /// Non-zero if the shader was created with UseViewportMask (GS only)
+    uint32_t useViewportMask = 0u;
+
+    bool enabled() const {
+      return positionViewReg[0] >= 0 || viewportMaskReg >= 0;
+    }
+  };
+
+
   /**
    * \brief IR shader properties
    *
@@ -29,6 +56,8 @@ namespace dxvk {
     uint32_t flatShadingInputs = 0u;
     /// Rasterized geometry stream
     int32_t rasterizedStream = 0;
+    /// NVAPI multi-view semantic mapping (dxvk-nvapi interop)
+    DxvkNvMultiviewInfo nvMultiview = { };
     /// Streamout parameters
     small_vector<dxbc_spv::ir::IoXfbInfo, 8u> xfbEntries = { };
 

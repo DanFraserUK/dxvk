@@ -1,3 +1,4 @@
+#include <atomic>
 #include <vector>
 #include <utility>
 #include <cstring>
@@ -23,14 +24,34 @@ namespace dxvk {
   void STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::SetMultiviewModeNV(
           uint32_t                NumViews,
           BOOL                    IndependentViewportMask) {
-    // M1: observe only. M4 turns this into real per-draw state.
-    static thread_local uint32_t s_lastNumViews = ~0u;
+    D3D10DeviceLock lock = m_ctx->LockContext();
 
-    if (NumViews != s_lastNumViews) {
-      s_lastNumViews = NumViews;
-      Logger::info(str::format("D3D11DeviceContextExt: SetMultiviewModeNV: numViews=",
-        NumViews, " independentMask=", IndependentViewportMask, " (M1: no-op)"));
+    // ~44% of iRacing's calls are redundant no-op re-sets (recon, handoff
+    // section 3): dedupe under the context lock, before the CS stream.
+    // Reads the one true copy on D3D11CommonContext, not a field of
+    // its own - the Ext class already holds m_ctx, so it can read
+    // through that pointer instead of keeping a second copy that could
+    // drift out of step with it.
+    if (NumViews == m_ctx->GetNvMultiviewNumViews()
+     && bool(IndependentViewportMask) == m_ctx->GetNvMultiviewIndependentMask())
+      return;
+
+    m_ctx->SetNvMultiviewToggleState(NumViews, bool(IndependentViewportMask));
+
+    // Budgeted evidence: a handful of transitions per session, not 24k.
+    static std::atomic<int32_t> s_logBudget = { 8 };
+
+    if (s_logBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
+      Logger::info(str::format("SetMultiviewModeNV: numViews=", NumViews,
+        " independentMask=", IndependentViewportMask, " (forwarded to CS)"));
     }
+
+    m_ctx->EmitCs([
+      cNumViews = NumViews,
+      cIndependentMask = bool(IndependentViewportMask)
+    ] (DxvkContext* ctx) {
+      ctx->setNvMultiviewState(cNumViews, cIndependentMask);
+    });
   }
   
   

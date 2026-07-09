@@ -1107,6 +1107,22 @@ namespace dxvk {
             DxvkDepthBounds     depthBounds);
     
     /**
+     * \brief Sets NVAPI multi-view state
+     *
+     * Per-draw toggle forwarded from the D3D11 interop layer
+     * (dxvk-nvapi SetMultiViewMode). Stored only in this milestone;
+     * consumed from Milestone 4.C.
+     * \param [in] numViews Number of views (1 = multi-view off)
+     * \param [in] independentViewportMask Per-view viewport masks in use
+     */
+    void setNvMultiviewState(
+            uint32_t            numViews,
+            bool                independentViewportMask) {
+      m_nvMultiviewNumViews = numViews;
+      m_nvMultiviewIndependentMask = independentViewportMask;
+    }
+
+    /**
      * \brief Sets stencil reference
      * 
      * Sets the reference value for stencil compare operations.
@@ -1355,6 +1371,9 @@ namespace dxvk {
     DxvkContextState        m_state;
     DxvkContextFeatures     m_features;
     DxvkDescriptorState     m_descriptorState;
+
+    uint32_t                m_nvMultiviewNumViews = 1u;
+    bool                    m_nvMultiviewIndependentMask = false;
 
     Rc<DxvkDescriptorPool>  m_descriptorPool;
 

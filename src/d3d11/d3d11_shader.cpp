@@ -42,6 +42,15 @@ namespace dxvk {
       options.classInstanceRegisterIndex = D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT + 1u;
       options.limitTessFactor = true;
 
+      if (m_info.nvMultiview.enabled()) {
+        Logger::info(str::format("NvMultiview: compiling ", debugName,
+          " (posViews o", m_info.nvMultiview.positionViewReg[0],
+          "/o", m_info.nvMultiview.positionViewReg[1],
+          "/o", m_info.nvMultiview.positionViewReg[2],
+          ", mask o", m_info.nvMultiview.viewportMaskReg,
+          ", vpMask=", m_info.nvMultiview.useViewportMask, ")"));
+      }
+      
       dxbc_spv::dxbc::Container container(m_dxbc.data(), m_dxbc.size());
 
       dxbc_spv::dxbc::ShaderInfo shaderInfo =

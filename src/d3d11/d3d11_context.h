@@ -89,6 +89,29 @@ namespace dxvk {
 
     ~D3D11CommonContext();
 
+    /**
+     * \brief Sets NVAPI multi-view toggle state
+     *
+     * Written by D3D11DeviceContextExt::SetMultiviewModeNV, under the
+     * same D3D10DeviceLock every other piece of state on this class
+     * already uses. Read back by Milestone 4.C's auto-attach check -
+     * this is the one true copy; nothing else keeps its own.
+     */
+    void SetNvMultiviewToggleState(
+            uint32_t                NumViews,
+            bool                    IndependentMask) {
+      m_nvMultiviewNumViews = NumViews;
+      m_nvMultiviewIndependentMask = IndependentMask;
+    }
+
+    uint32_t GetNvMultiviewNumViews() const {
+      return m_nvMultiviewNumViews;
+    }
+
+    bool GetNvMultiviewIndependentMask() const {
+      return m_nvMultiviewIndependentMask;
+    }
+
     HRESULT STDMETHODCALLTYPE QueryInterface(
             REFIID  riid,
             void**  ppvObject);
@@ -1259,6 +1282,9 @@ namespace dxvk {
     }
 
   private:
+
+    uint32_t m_nvMultiviewNumViews = 1u;
+    bool     m_nvMultiviewIndependentMask = false;
 
     ContextType* GetTypedContext() {
       return static_cast<ContextType*>(this);

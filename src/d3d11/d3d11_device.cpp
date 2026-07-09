@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <atomic>
 #include <cstring>
 
 #include <dxbc/dxbc_container.h>
@@ -811,6 +810,34 @@ namespace dxvk {
   }
   
   
+  HRESULT D3D11Device::CreateVertexShaderNvMultiview(
+    const void*                   pShaderBytecode,
+          SIZE_T                  BytecodeLength,
+          ID3D11ClassLinkage*     pClassLinkage,
+    const DxvkNvMultiviewInfo&    NvMultiview,
+          ID3D11VertexShader**    ppVertexShader) {
+    InitReturnPtr(ppVertexShader);
+    D3D11CommonShader module;
+
+    DxvkIrShaderCreateInfo moduleInfo = { };
+    moduleInfo.options = m_shaderOptions;
+    moduleInfo.nvMultiview = NvMultiview;
+
+    HRESULT hr = CreateShaderModule(&module, pClassLinkage,
+      ComputeShaderKey(VK_SHADER_STAGE_VERTEX_BIT, pShaderBytecode, BytecodeLength, NvMultiview),
+      pShaderBytecode, BytecodeLength, moduleInfo);
+
+    if (FAILED(hr))
+      return hr;
+
+    if (!ppVertexShader)
+      return S_FALSE;
+
+    *ppVertexShader = ref(new D3D11VertexShader(this, module));
+    return S_OK;
+  }
+  
+  
   HRESULT STDMETHODCALLTYPE D3D11Device::CreateGeometryShader(
     const void*                       pShaderBytecode,
           SIZE_T                      BytecodeLength,
@@ -832,6 +859,34 @@ namespace dxvk {
     if (!ppGeometryShader)
       return S_FALSE;
     
+    *ppGeometryShader = ref(new D3D11GeometryShader(this, module));
+    return S_OK;
+  }
+  
+  
+  HRESULT D3D11Device::CreateGeometryShaderNvMultiview(
+    const void*                   pShaderBytecode,
+          SIZE_T                  BytecodeLength,
+          ID3D11ClassLinkage*     pClassLinkage,
+    const DxvkNvMultiviewInfo&    NvMultiview,
+          ID3D11GeometryShader**  ppGeometryShader) {
+    InitReturnPtr(ppGeometryShader);
+    D3D11CommonShader module;
+
+    DxvkIrShaderCreateInfo moduleInfo = { };
+    moduleInfo.options = m_shaderOptions;
+    moduleInfo.nvMultiview = NvMultiview;
+
+    HRESULT hr = CreateShaderModule(&module, pClassLinkage,
+      ComputeShaderKey(VK_SHADER_STAGE_GEOMETRY_BIT, pShaderBytecode, BytecodeLength, NvMultiview),
+      pShaderBytecode, BytecodeLength, moduleInfo);
+
+    if (FAILED(hr))
+      return hr;
+
+    if (!ppGeometryShader)
+      return S_FALSE;
+
     *ppGeometryShader = ref(new D3D11GeometryShader(this, module));
     return S_OK;
   }
@@ -2305,6 +2360,29 @@ namespace dxvk {
   }
 
 
+  DxvkShaderHash D3D11Device::ComputeShaderKey(
+          VkShaderStageFlagBits   Stage,
+    const void*                   pShaderBytecode,
+          size_t                  BytecodeLength,
+    const DxvkNvMultiviewInfo&    NvMultiview) {
+    // Same bytecode with and without NV multi-view metadata must not
+    // collide in the module set, the debug name, or the on-disk cache.
+    // Mirrors the stream-output overload above: bytecode hash + salt.
+    dxbc_spv::dxbc::Container container(pShaderBytecode, BytecodeLength);
+    auto binHash = container.getHash();
+
+    dxbc_spv::util::md5::Hasher nvHasher;
+    nvHasher.update(&NvMultiview, sizeof(NvMultiview));
+    nvHasher.finalize();
+
+    auto nvHash = nvHasher.getDigest();
+
+    return DxvkShaderHash(Stage, BytecodeLength,
+      binHash.data.data(), binHash.data.size(),
+      nvHash.data.data(), nvHash.data.size());
+  }
+
+
   HRESULT D3D11Device::GetFormatSupportFlags(DXGI_FORMAT Format, UINT* pFlags1, UINT* pFlags2) const {
     const DXGI_VK_FORMAT_INFO fmtMapping = LookupFormat(Format, DXGI_VK_FORMAT_MODE_ANY);
 
@@ -3192,106 +3270,110 @@ namespace dxvk {
   }
 
 
-  // M4.A (T-A): resolve an NVAPI custom-semantic array against the DXBC
-  // output signature of the shader being created, and log the mapping.
-  // Read-only reconnaissance: compilation behavior is unchanged in this step.
-  static void LogNvCustomSemanticMapping(
+  // M4.B (T-B): resolve an NVAPI custom-semantic array against the DXBC
+  // output signature. Encodes the M4.A ground truth (guide §5.3.0):
+  //  - type 5 (NV_POSITION): the signature carries the per-view family
+  //    NV_POSITION_VIEW_{1,2,3}_SEMANTIC; view 0's position is SV_POSITION.
+  //  - types 2 / 4 (viewport masks): request strings match exactly, u32x4.
+  //  - type 3 (NV_X_RIGHT, single-pass stereo): confirmed absent from every
+  //    iRacing signature; not part of SMP - recorded as ignored.
+  static DxvkNvMultiviewInfo ResolveNvCustomSemantics(
     const char*                         ShaderType,
     const void*                         pShaderBytecode,
           SIZE_T                        BytecodeLength,
     const D3D11_VK_NV_CUSTOM_SEMANTIC*  pSemantics,
           uint32_t                      NumSemantics) {
+    DxvkNvMultiviewInfo result = { };
+
     dxbc_spv::dxbc::Container container(pShaderBytecode, BytecodeLength);
 
     if (!container) {
       Logger::warn(str::format("NvSemantics(", ShaderType, "): invalid DXBC container"));
-      return;
+      return result;
     }
 
     auto osgnChunk = container.getOutputSignatureChunk();
 
     if (!osgnChunk) {
       Logger::warn(str::format("NvSemantics(", ShaderType, "): no output signature chunk"));
-      return;
+      return result;
     }
 
     dxbc_spv::dxbc::Signature outputSignature(std::move(osgnChunk));
 
-    bool anyUnmatched = false;
+    static const std::array<const char*, 3> s_positionViewNames = {{
+      "NV_POSITION_VIEW_1_SEMANTIC",
+      "NV_POSITION_VIEW_2_SEMANTIC",
+      "NV_POSITION_VIEW_3_SEMANTIC",
+    }};
 
     std::stringstream msg;
-    msg << "NvSemantics(" << ShaderType << ", " << container.getHash() << "): ";
+    msg << "NvSemantics(" << ShaderType << ", " << container.getHash() << "):";
 
     for (uint32_t i = 0; i < NumSemantics; i++) {
       const auto& sem = pSemantics[i];
 
-      if (i)
-        msg << ", ";
+      switch (sem.Type) {
+        case 2u: { // NV_VIEWPORT_MASK_SEMANTIC
+          for (auto e = outputSignature.begin(); e != outputSignature.end(); e++) {
+            if (e->matches(sem.Name))
+              result.viewportMaskReg = e->getRegisterIndex();
+          }
+          msg << " mask->o" << result.viewportMaskReg;
+        } break;
 
-      msg << sem.Name << "(type=" << sem.Type << ")";
+        case 4u: { // NV_VIEWPORT_MASK_2_SEMANTIC
+          for (auto e = outputSignature.begin(); e != outputSignature.end(); e++) {
+            if (e->matches(sem.Name))
+              result.viewportMask2Reg = e->getRegisterIndex();
+          }
+          msg << " mask2->o" << result.viewportMask2Reg;
+        } break;
 
-      if (sem.RegisterSpecified) {
-        // Never observed with iRacing (reg=auto everywhere) - log and move on.
-        msg << " -> o" << sem.RegisterNum << " (explicit register)";
-        continue;
-      }
+        case 5u: { // NV_POSITION_SEMANTIC: per-view family, view 0 = SV_POSITION
+          for (size_t v = 0; v < s_positionViewNames.size(); v++) {
+            for (auto e = outputSignature.begin(); e != outputSignature.end(); e++) {
+              if (e->matches(s_positionViewNames[v]))
+                result.positionViewReg[v] = e->getRegisterIndex();
+            }
+          }
+          msg << " posViews->o" << result.positionViewReg[0]
+              << "/o" << result.positionViewReg[1]
+              << "/o" << result.positionViewReg[2];
+        } break;
 
-      bool found = false;
-
-      for (auto entry = outputSignature.begin(); entry != outputSignature.end(); entry++) {
-        if (!entry->matches(sem.Name))
-          continue;
-
-        msg << (found ? " + " : " -> ")
-            << "o" << entry->getRegisterIndex()
-            << "." << entry->getComponentMask()
-            << "(semIdx=" << entry->getSemanticIndex()
-            << ",stream=" << entry->getStreamIndex() << ")";
-
-        found = true;
-      }
-
-      if (!found) {
-        msg << " -> UNMATCHED";
-        anyUnmatched = true;
+        default: // type 3 = NV_X_RIGHT (SPS) and anything else unexpected
+          msg << " " << sem.Name << "(type=" << sem.Type << ") ignored";
       }
     }
 
     Logger::info(msg.str());
-
-    // Ground truth: dump the full output-signature table for the first few
-    // shaders, plus the first few whose request had an unmatched semantic.
-    static std::atomic<int32_t> s_dumpBudget = { 8 };
-    static std::atomic<int32_t> s_unmatchedBudget = { 8 };
-
-    bool dump = s_dumpBudget.fetch_sub(1, std::memory_order_relaxed) > 0;
-
-    if (anyUnmatched && !dump)
-      dump = s_unmatchedBudget.fetch_sub(1, std::memory_order_relaxed) > 0;
-
-    if (dump) {
-      Logger::info(str::format("NvSemantics(", ShaderType, ", ",
-        container.getHash(), ") output signature:\n", outputSignature));
-    }
+    return result;
   }
   
   
-HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateVertexShaderNvSemantics(
+  HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateVertexShaderNvSemantics(
     const void*                     pShaderBytecode,
           SIZE_T                    BytecodeLength,
           ID3D11ClassLinkage*       pClassLinkage,
     const D3D11_VK_NV_CUSTOM_SEMANTIC* pSemantics,
           uint32_t                  NumSemantics,
           ID3D11VertexShader**      ppVertexShader) {
-    LogNvCustomSemanticMapping("VS",
+    DxvkNvMultiviewInfo nv = ResolveNvCustomSemantics("VS",
       pShaderBytecode, BytecodeLength, pSemantics, NumSemantics);
 
-    return m_device->CreateVertexShader(
-      pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
+    if (!nv.enabled()) {
+      // Nothing multi-view in this signature: plain compile, as before.
+      return m_device->CreateVertexShader(
+        pShaderBytecode, BytecodeLength, pClassLinkage, ppVertexShader);
+    }
+
+    return m_device->CreateVertexShaderNvMultiview(
+      pShaderBytecode, BytecodeLength, pClassLinkage, nv, ppVertexShader);
   }
 
 
-HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateGeometryShaderNvSemantics(
+  HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateGeometryShaderNvSemantics(
     const void*                     pShaderBytecode,
           SIZE_T                    BytecodeLength,
           ID3D11ClassLinkage*       pClassLinkage,
@@ -3299,11 +3381,20 @@ HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateGeometryShaderNvSemantics(
           uint32_t                  NumSemantics,
           BOOL                      UseViewportMask,
           ID3D11GeometryShader**    ppGeometryShader) {
-    LogNvCustomSemanticMapping(UseViewportMask ? "GS vpMask=1" : "GS vpMask=0",
+    DxvkNvMultiviewInfo nv = ResolveNvCustomSemantics(
+      UseViewportMask ? "GS vpMask=1" : "GS vpMask=0",
       pShaderBytecode, BytecodeLength, pSemantics, NumSemantics);
+    nv.useViewportMask = UseViewportMask ? 1u : 0u;
 
-    return m_device->CreateGeometryShader(
-      pShaderBytecode, BytecodeLength, pClassLinkage, ppGeometryShader);
+    if (!nv.enabled()) {
+      // The SPS-flavored GS family lands here (NV_X_RIGHT, no mask output):
+      // plain compile, exactly as M1-M4.A always did.
+      return m_device->CreateGeometryShader(
+        pShaderBytecode, BytecodeLength, pClassLinkage, ppGeometryShader);
+    }
+
+    return m_device->CreateGeometryShaderNvMultiview(
+      pShaderBytecode, BytecodeLength, pClassLinkage, nv, ppGeometryShader);
   }
 
 
