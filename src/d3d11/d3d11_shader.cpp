@@ -62,6 +62,19 @@ namespace dxvk {
       // Per-vertex pass-through: 3 input vertices (triangle), every
       // captured entry carried through unchanged, at its OWN component
       // count (the resolver's getVectorType() - never a fixed float4).
+      //
+      // Location assignment: io.regIndex is the ORIGINAL vertex shader's
+      // output register number - it has nothing to do with this shader's
+      // OWN interface and must never be reused as a location here. Fresh,
+      // locally-tracked counters instead: inputs advance by 3 (each is an
+      // array of 3, one per triangle corner, and an arrayed GS input
+      // consumes one location PER ARRAY ELEMENT - 3 consecutive locations,
+      // not 1), outputs advance by 1 (a single value, no array widening).
+      // Input and output locations are independent SPIR-V namespaces, so
+      // there's no need to keep the two counters in sync with each other.
+      uint32_t nextInputLocation = 0u;
+      uint32_t nextOutputLocation = 0u;
+
       for (const auto& io : m_passthroughIo) {
         // INPUT must be shaped "3 of these," one slot per triangle
         // corner - that's what makes reading with v=0,1,2 mean "corner
@@ -73,15 +86,18 @@ namespace dxvk {
         auto inputType = ir::Type(io.type).addArrayDimension(3u);
 
         auto inDecl = builder.add(ir::Op::DclInput(
-          inputType, entryPoint, io.regIndex, 0u));
+          inputType, entryPoint, nextInputLocation, 0u));
         auto outDecl = builder.add(ir::Op::DclOutput(
-          ir::Type(io.type), entryPoint, io.regIndex, 0u));
+          ir::Type(io.type), entryPoint, nextOutputLocation, 0u));
 
         for (uint32_t v = 0u; v < 3u; v++) {
           auto value = builder.add(ir::Op::InputLoad(
             ir::Type(io.type), inDecl, builder.makeConstant(v)));
           builder.add(ir::Op::OutputStore(outDecl, ir::SsaDef(), value));
         }
+
+        nextInputLocation += 3u;
+        nextOutputLocation += 1u;
       }
 
       for (uint32_t v = 0u; v < 3u; v++)
