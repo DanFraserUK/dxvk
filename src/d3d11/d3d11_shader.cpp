@@ -96,7 +96,7 @@ namespace dxvk {
           builder.add(ir::Op::OutputStore(outDecl, ir::SsaDef(), value));
         }
 
-        nextInputLocation += 3u;
+        nextInputLocation += 1u;
         nextOutputLocation += 1u;
       }
 
