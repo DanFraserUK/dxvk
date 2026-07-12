@@ -148,18 +148,23 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         nextInputLocation += 1u;
       }
 
-      // TEMP DIAGNOSTIC — bypasses the Select/IEq chain entirely to test
-      // whether the raw loaded NV_POSITION_VIEW_1_SEMANTIC data is correct
-      // on its own. Writes view 1's raw value to EVERY instance's output
-      // (falls back to view 0's value if this shader has no view-1 data,
-      // so this stays safe to build across every shader in the game, not
-      // just the one we're testing). REVERT to the real version above
-      // once this test is done — this deliberately breaks views 0/2/3.
+      // NEW: per triangle corner, pick the right view's position (based on
+      // which GS instance/view is currently running) and write the real
+      // position output.
       for (uint32_t v = 0u; v < 3u; v++) {
-        ir::SsaDef diag = positionPerViewPerVertex[1][v]
-          ? positionPerViewPerVertex[1][v]
-          : positionPerViewPerVertex[0][v];
-        builder.add(ir::Op::OutputStore(positionOutDecl, ir::SsaDef(), diag));
+        ir::SsaDef chosen = positionPerViewPerVertex[0][v];
+
+        for (uint32_t view = 1u; view < 4u; view++) {
+          if (!positionPerViewPerVertex[view][v])
+            continue;
+          auto isThisView = builder.add(ir::Op::IEq(
+            ir::ScalarType::eU32, instanceId, builder.makeConstant(view)));
+          chosen = builder.add(ir::Op::Select(
+            ir::Type(ir::BasicType(ir::ScalarType::eF32, 4u)),
+            isThisView, positionPerViewPerVertex[view][v], chosen));
+        }
+
+        builder.add(ir::Op::OutputStore(positionOutDecl, ir::SsaDef(), chosen));
       }
 
       for (uint32_t v = 0u; v < 3u; v++)
