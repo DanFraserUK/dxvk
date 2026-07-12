@@ -194,9 +194,10 @@ namespace dxvk {
      * can still share, the same reasoning as the mutex right below it).
      */
     Rc<DxvkShader> GetOrCreateNvAmplificationGs(
-            D3D11Device*            pDevice,
-      const DxvkShaderHash&         VsKey,
-            uint32_t                NumViews) const;
+          D3D11Device*            pDevice,
+    const DxvkShaderHash&         VsKey,
+          uint32_t                NumViews,
+    const DxvkNvMultiviewInfo&    NvMultiview) const;
 
     DxvkBufferSlice GetIcb() const {
       return m_buffer != nullptr

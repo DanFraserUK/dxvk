@@ -43,20 +43,19 @@ namespace dxvk {
    * when the corresponding output is not present. Trivially copyable and
    * padding-free by construction: hash() and eq() operate on raw bytes.
    */
-  struct DxvkNvMultiviewInfo {
-    /// NV_POSITION_VIEW_{1,2,3}_SEMANTIC output registers
-    std::array<int32_t, 3> positionViewReg = { -1, -1, -1 };
-    /// NV_VIEWPORT_MASK output register (u32x4, one lane per view 0-3)
-    int32_t viewportMaskReg = -1;
-    /// NV_VIEWPORT_MASK_2_SEMANTIC output register (u32x4, views 4-7)
-    int32_t viewportMask2Reg = -1;
-    /// Non-zero if the shader was created with UseViewportMask (GS only)
-    uint32_t useViewportMask = 0u;
+struct DxvkNvMultiviewInfo {
+  std::array<int32_t, 3> positionViewReg = { -1, -1, -1 };
+  /// Data type of each register above — the index alone isn't enough
+  /// to declare a matching GS input for it.
+  std::array<dxbc_spv::ir::BasicType, 3> positionViewType = { };
+  int32_t viewportMaskReg = -1;
+  int32_t viewportMask2Reg = -1;
+  uint32_t useViewportMask = 0u;
 
-    bool enabled() const {
-      return positionViewReg[0] >= 0 || viewportMaskReg >= 0;
-    }
-  };
+  bool enabled() const {
+    return positionViewReg[0] >= 0 || viewportMaskReg >= 0;
+  }
+};
 
 
   /**

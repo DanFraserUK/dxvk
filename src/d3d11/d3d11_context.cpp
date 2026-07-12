@@ -1420,7 +1420,8 @@ namespace dxvk {
           }
 
           auto ampGs = commonShader->GetOrCreateNvAmplificationGs(
-            m_parent, commonShader->GetShaderKey(), liveNumViews);
+            m_parent, commonShader->GetShaderKey(), liveNumViews,
+            irShader->getShaderCreateInfo().nvMultiview);
 
           EmitCs([cShader = ampGs] (DxvkContext* ctx) {
             ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(Rc<DxvkShader>(cShader));

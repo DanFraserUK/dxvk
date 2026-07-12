@@ -3368,8 +3368,10 @@ namespace dxvk {
         case 5u: { // NV_POSITION_SEMANTIC: per-view family, view 0 = SV_POSITION
           for (size_t v = 0; v < s_positionViewNames.size(); v++) {
             for (auto e = outputSignature.begin(); e != outputSignature.end(); e++) {
-              if (e->matches(s_positionViewNames[v]))
+              if (e->matches(s_positionViewNames[v])) {
                 result.positionViewReg[v] = e->getRegisterIndex();
+                result.positionViewType[v] = e->getVectorType();
+              }
             }
           }
           msg << " posViews->o" << result.positionViewReg[0]

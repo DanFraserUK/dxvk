@@ -28,8 +28,10 @@ namespace dxvk {
     D3D11NvAmplificationGsConverter(
       const DxvkShaderHash&                        VsKey,
       std::vector<DxvkNvPassthroughIoEntry>        PassthroughIo,
-            uint32_t                                NumViews)
-    : m_key(VsKey), m_passthroughIo(std::move(PassthroughIo)), m_numViews(NumViews) { }
+            uint32_t                                NumViews,
+      const DxvkNvMultiviewInfo&                    NvMultiview)
+    : m_key(VsKey), m_passthroughIo(std::move(PassthroughIo)),
+      m_numViews(NumViews), m_nvMultiview(NvMultiview) { }
 
     void convertShader(dxbc_spv::ir::Builder& builder) override {
       using namespace dxbc_spv;
@@ -137,6 +139,7 @@ namespace dxvk {
     DxvkShaderHash                          m_key;
     std::vector<DxvkNvPassthroughIoEntry>   m_passthroughIo;
     uint32_t                                m_numViews;
+    DxvkNvMultiviewInfo                     m_nvMultiview;
 
   };
 
@@ -375,7 +378,8 @@ namespace dxvk {
   Rc<DxvkShader> D3D11CommonShader::GetOrCreateNvAmplificationGs(
           D3D11Device*            pDevice,
     const DxvkShaderHash&         VsKey,
-          uint32_t                NumViews) const {
+          uint32_t                NumViews,
+    const DxvkNvMultiviewInfo&    NvMultiview) const {
     std::lock_guard lock(*m_nvAmplificationMutex);
 
     if (*m_nvAmplificationGs != nullptr) {
@@ -393,7 +397,7 @@ namespace dxvk {
       NumViews, " views)"));
 
     Rc<D3D11NvAmplificationGsConverter> converter =
-      new D3D11NvAmplificationGsConverter(VsKey, m_nvPassthroughIo, NumViews);
+      new D3D11NvAmplificationGsConverter(VsKey, m_nvPassthroughIo, NumViews, NvMultiview);
 
     DxvkIrShaderCreateInfo nvAmpGsInfo = { };
     nvAmpGsInfo.options.flags.set(DxvkShaderCompileFlag::SemanticIo);
