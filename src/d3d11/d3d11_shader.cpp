@@ -33,7 +33,7 @@ namespace dxvk {
     : m_key(VsKey), m_passthroughIo(std::move(PassthroughIo)),
       m_numViews(NumViews), m_nvMultiview(NvMultiview) { }
 
-    void convertShader(dxbc_spv::ir::Builder& builder) override {
+void convertShader(dxbc_spv::ir::Builder& builder) override {
       using namespace dxbc_spv;
 
       auto mainFunc = builder.add(ir::Op::Function(ir::ScalarType::eVoid));
@@ -60,6 +60,16 @@ namespace dxvk {
       auto instanceId = builder.add(ir::Op::InputLoad(
         ir::ScalarType::eU32, instanceIdDecl, ir::SsaDef()));
       builder.add(ir::Op::OutputStore(viewportDecl, ir::SsaDef(), instanceId));
+
+      // NEW: the real position output, declared once, up front.
+      auto positionOutDecl = builder.add(ir::Op::DclOutputBuiltIn(
+        ir::Type(ir::BasicType(ir::ScalarType::eF32, 4u)), entryPoint, ir::BuiltIn::ePosition));
+
+      // NEW: [view][vertex] -> that view's position value for that vertex.
+      // index 0 = view 0 (ordinary SV_POSITION, captured in the passthrough
+      // loop below); indices 1-3 = the three NV_POSITION_VIEW_* registers,
+      // captured in the second loop further down.
+      std::array<std::array<ir::SsaDef, 3u>, 4u> positionPerViewPerVertex = { };
 
       // Per-vertex pass-through: 3 input vertices (triangle), every
       // captured entry carried through unchanged, at its OWN component
@@ -104,10 +114,57 @@ namespace dxvk {
           auto value = builder.add(ir::Op::InputLoad(
             ir::Type(io.type), inDecl, builder.makeConstant(v)));
           builder.add(ir::Op::OutputStore(outDecl, ir::SsaDef(), value));
+
+          // NEW: this entry is view 0's ordinary position — remember its
+          // value per corner as we pass it through unchanged.
+          if (util::compareCaseInsensitive(io.semanticName.c_str(), "SV_POSITION"))
+            positionPerViewPerVertex[0][v] = value;
         }
 
         nextInputLocation += 1u;
         nextOutputLocation += 1u;
+      }
+
+      // NEW: the 3 excluded per-view position registers — never part of
+      // m_passthroughIo (ResolveNvCustomSemantics filters them out on
+      // purpose) — get their own declarations here, one per view that's
+      // actually used by this VS.
+      static const std::array<const char*, 3> s_positionViewSemanticNames = {{
+        "NV_POSITION_VIEW_1_SEMANTIC", "NV_POSITION_VIEW_2_SEMANTIC", "NV_POSITION_VIEW_3_SEMANTIC" }};
+
+      for (uint32_t view = 0u; view < 3u; view++) {
+        if (m_nvMultiview.positionViewReg[view] < 0)
+          continue; // this VS doesn't use this view's custom position
+
+        auto viewPosType = m_nvMultiview.positionViewType[view];
+        auto viewPosDecl = builder.add(ir::Op::DclInput(
+          ir::Type(viewPosType).addArrayDimension(3u), entryPoint, nextInputLocation, 0u));
+        builder.add(ir::Op::Semantic(viewPosDecl, 0u, s_positionViewSemanticNames[view]));
+
+        for (uint32_t v = 0u; v < 3u; v++) {
+          positionPerViewPerVertex[view + 1][v] = builder.add(ir::Op::InputLoad(
+            ir::Type(viewPosType), viewPosDecl, builder.makeConstant(v)));
+        }
+        nextInputLocation += 1u;
+      }
+
+      // NEW: per triangle corner, pick the right view's position (based on
+      // which GS instance/view is currently running) and write the real
+      // position output.
+      for (uint32_t v = 0u; v < 3u; v++) {
+        ir::SsaDef chosen = positionPerViewPerVertex[0][v];
+
+        for (uint32_t view = 1u; view < 4u; view++) {
+          if (!positionPerViewPerVertex[view][v])
+            continue;
+          auto isThisView = builder.add(ir::Op::IEq(
+            ir::ScalarType::eBool, instanceId, builder.makeConstant(view)));
+          chosen = builder.add(ir::Op::Select(
+            ir::Type(ir::BasicType(ir::ScalarType::eF32, 4u)),
+            isThisView, positionPerViewPerVertex[view][v], chosen));
+        }
+
+        builder.add(ir::Op::OutputStore(positionOutDecl, ir::SsaDef(), chosen));
       }
 
       for (uint32_t v = 0u; v < 3u; v++)
