@@ -117,7 +117,7 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
 
           // NEW: this entry is view 0's ordinary position — remember its
           // value per corner as we pass it through unchanged.
-          if (util::compareCaseInsensitive(io.semanticName.c_str(), "SV_POSITION"))
+          if (str::compareCaseInsensitive(io.semanticName.c_str(), "SV_POSITION"))
             positionPerViewPerVertex[0][v] = value;
         }
 
