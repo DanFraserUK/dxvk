@@ -26,8 +26,10 @@ namespace dxvk {
    * the plain registers a rasterizer/PS reads.
    */
   struct DxvkNvPassthroughIoEntry {
-    uint32_t                regIndex = 0u;
-    dxbc_spv::ir::BasicType  type     = dxbc_spv::ir::BasicType();
+    uint32_t                regIndex      = 0u;
+    dxbc_spv::ir::BasicType  type          = dxbc_spv::ir::BasicType();
+    std::string              semanticName  = { };
+    uint32_t                 semanticIndex = 0u;
   };
 
 

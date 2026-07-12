@@ -3331,7 +3331,8 @@ namespace dxvk {
 
         if (!isNvInterop) {
           pPassthroughIo->push_back({
-            uint32_t(e->getRegisterIndex()), e->getVectorType()
+            uint32_t(e->getRegisterIndex()), e->getVectorType(),
+            std::string(e->getSemanticName()), e->getSemanticIndex()
           });
         }
       }

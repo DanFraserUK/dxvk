@@ -90,6 +90,14 @@ namespace dxvk {
         auto outDecl = builder.add(ir::Op::DclOutput(
           ir::Type(io.type), entryPoint, nextOutputLocation, 0u));
 
+        // Attach the REAL semantic (copied from the original vertex
+        // shader's own signature) to both the input and output declaration.
+        // This lets DXVK's own resolveSemanticIo self-correct the location
+        // if it's ever wrong, instead of relying purely on our own
+        // location counters being exactly right with no safety net.
+        builder.add(ir::Op::Semantic(inDecl, io.semanticIndex, io.semanticName.c_str()));
+        builder.add(ir::Op::Semantic(outDecl, io.semanticIndex, io.semanticName.c_str()));
+
         for (uint32_t v = 0u; v < 3u; v++) {
           auto value = builder.add(ir::Op::InputLoad(
             ir::Type(io.type), inDecl, builder.makeConstant(v)));
@@ -387,8 +395,11 @@ namespace dxvk {
     Rc<D3D11NvAmplificationGsConverter> converter =
       new D3D11NvAmplificationGsConverter(VsKey, m_nvPassthroughIo, NumViews);
 
+    DxvkIrShaderCreateInfo nvAmpGsInfo = { };
+    nvAmpGsInfo.options.flags.set(DxvkShaderCompileFlag::SemanticIo);
+
     *m_nvAmplificationGs = pDevice->GetDXVKDevice()->createCachedShader(
-      VsKey.toString() + "_nvAmpGs", DxvkIrShaderCreateInfo(), std::move(converter));
+      VsKey.toString() + "_nvAmpGs", nvAmpGsInfo, std::move(converter));
 
     return *m_nvAmplificationGs;
   }
