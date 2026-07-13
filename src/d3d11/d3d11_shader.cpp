@@ -87,14 +87,14 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
       uint32_t nextInputLocation = 0u;
       uint32_t nextOutputLocation = 0u;
 
+      // Collect every passthrough attribute's per-corner value AND its
+      // output declaration here, instead of writing to the output the
+      // moment it's loaded. We need all 3 corners' values in hand before
+      // we can safely write+emit corner-by-corner further down.
+      std::vector<ir::SsaDef> passthroughOutDecls;
+      std::vector<std::array<ir::SsaDef, 3u>> passthroughValuesPerVertex;
+
       for (const auto& io : m_passthroughIo) {
-        // INPUT must be shaped "3 of these," one slot per triangle
-        // corner - that's what makes reading with v=0,1,2 mean "corner
-        // 0/1/2" rather than "piece 0/1/2 of one value." A geometry
-        // shader always reads its per-vertex inputs this way; leaving
-        // this shape off is a real trap, worth reading §11 for. OUTPUT
-        // stays a single value: one write per EmitVertex, never an
-        // array.
         auto inputType = ir::Type(io.type).addArrayDimension(3u);
 
         auto inDecl = builder.add(ir::Op::DclInput(
@@ -102,39 +102,35 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         auto outDecl = builder.add(ir::Op::DclOutput(
           ir::Type(io.type), entryPoint, nextOutputLocation, 0u));
 
-        // Attach the REAL semantic (copied from the original vertex
-        // shader's own signature) to both the input and output declaration.
-        // This lets DXVK's own resolveSemanticIo self-correct the location
-        // if it's ever wrong, instead of relying purely on our own
-        // location counters being exactly right with no safety net.
         builder.add(ir::Op::Semantic(inDecl, io.semanticIndex, io.semanticName.c_str()));
         builder.add(ir::Op::Semantic(outDecl, io.semanticIndex, io.semanticName.c_str()));
 
+        std::array<ir::SsaDef, 3u> values = { };
         for (uint32_t v = 0u; v < 3u; v++) {
-          auto value = builder.add(ir::Op::InputLoad(
+          values[v] = builder.add(ir::Op::InputLoad(
             ir::Type(io.type), inDecl, builder.makeConstant(v)));
-          builder.add(ir::Op::OutputStore(outDecl, ir::SsaDef(), value));
 
-          // NEW: this entry is view 0's ordinary position — remember its
-          // value per corner as we pass it through unchanged.
           if (str::compareCaseInsensitive(io.semanticName.c_str(), "SV_POSITION"))
-            positionPerViewPerVertex[0][v] = value;
+            positionPerViewPerVertex[0][v] = values[v];
         }
+
+        passthroughOutDecls.push_back(outDecl);
+        passthroughValuesPerVertex.push_back(values);
 
         nextInputLocation += 1u;
         nextOutputLocation += 1u;
       }
 
-      // NEW: the 3 excluded per-view position registers — never part of
-      // m_passthroughIo (ResolveNvCustomSemantics filters them out on
-      // purpose) — get their own declarations here, one per view that's
-      // actually used by this VS.
+      // Per-view custom position registers: unchanged. This part only
+      // LOADS values into positionPerViewPerVertex — it never writes to
+      // an output, so it was never affected by the re-inking bug and
+      // doesn't need to change.
       static const std::array<const char*, 3> s_positionViewSemanticNames = {{
         "NV_POSITION_VIEW_1_SEMANTIC", "NV_POSITION_VIEW_2_SEMANTIC", "NV_POSITION_VIEW_3_SEMANTIC" }};
 
       for (uint32_t view = 0u; view < 3u; view++) {
         if (m_nvMultiview.positionViewReg[view] < 0)
-          continue; // this VS doesn't use this view's custom position
+          continue;
 
         auto viewPosType = m_nvMultiview.positionViewType[view];
         auto viewPosDecl = builder.add(ir::Op::DclInput(
@@ -148,9 +144,11 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         nextInputLocation += 1u;
       }
 
-      // NEW: per triangle corner, pick the right view's position (based on
-      // which GS instance/view is currently running) and write the real
-      // position output.
+      // Compute each corner's chosen position (same Select/IEq logic as
+      // before) and stash it per-corner, instead of writing it to the
+      // output immediately — same reasoning as the passthrough loop above.
+      std::array<ir::SsaDef, 3u> chosenPositionPerVertex = { };
+
       for (uint32_t v = 0u; v < 3u; v++) {
         ir::SsaDef chosen = positionPerViewPerVertex[0][v];
 
@@ -164,11 +162,22 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
             isThisView, positionPerViewPerVertex[view][v], chosen));
         }
 
-        builder.add(ir::Op::OutputStore(positionOutDecl, ir::SsaDef(), chosen));
+        chosenPositionPerVertex[v] = chosen;
       }
 
-      for (uint32_t v = 0u; v < 3u; v++)
+      // THE ACTUAL FIX: one corner at a time — write every output for
+      // this corner, THEN emit, THEN move to the next corner. This is
+      // the store -> emit -> store -> emit -> store -> emit pattern a
+      // geometry shader actually requires.
+      for (uint32_t v = 0u; v < 3u; v++) {
+        for (size_t i = 0u; i < passthroughOutDecls.size(); i++) {
+          builder.add(ir::Op::OutputStore(
+            passthroughOutDecls[i], ir::SsaDef(), passthroughValuesPerVertex[i][v]));
+        }
+
+        builder.add(ir::Op::OutputStore(positionOutDecl, ir::SsaDef(), chosenPositionPerVertex[v]));
         builder.add(ir::Op::EmitVertex(0u));
+      }
     }
 
     uint32_t determineResourceIndex(
