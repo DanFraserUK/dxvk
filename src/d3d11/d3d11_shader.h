@@ -228,6 +228,12 @@ namespace dxvk {
     DxvkShaderHash                        m_shaderKey;
     std::shared_ptr<Rc<DxvkShader>>       m_nvAmplificationGs    = std::make_shared<Rc<DxvkShader>>();
     std::shared_ptr<dxvk::mutex>          m_nvAmplificationMutex = std::make_shared<dxvk::mutex>();
+    // What NumViews/NvMultiview the cached GS above was actually built
+    // with. Needed so GetOrCreateNvAmplificationGs can tell a genuinely
+    // stale cache entry apart from a valid one, instead of trusting
+    // "non-null" as the only signal that the cache is still correct.
+    std::shared_ptr<uint32_t>             m_nvAmplificationNumViews = std::make_shared<uint32_t>(0u);
+    std::shared_ptr<DxvkNvMultiviewInfo>  m_nvAmplificationInfo     = std::make_shared<DxvkNvMultiviewInfo>();
 
     D3D11BindingMask    m_bindings = { };
     D3D11InterfaceInfo  m_interfaces = { };

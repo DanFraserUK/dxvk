@@ -8,6 +8,8 @@
 #include "d3d11_device.h"
 #include "d3d11_shader.h"
 
+#include <cstring>
+
 namespace dxvk {
 
   // M4.C (T-C): builds a geometry shader that never lived in
@@ -448,7 +450,16 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
     const DxvkNvMultiviewInfo&    NvMultiview) const {
     std::lock_guard lock(*m_nvAmplificationMutex);
 
-    if (*m_nvAmplificationGs != nullptr) {
+    // A cache entry is only trustworthy if it was actually built for
+    // THIS NumViews/NvMultiview. Trusting "non-null" alone let a VS
+    // that was first amplified under one live config silently keep
+    // serving that config forever, even to later draws that need a
+    // genuinely different one.
+    bool cacheMatches = *m_nvAmplificationGs != nullptr
+      && *m_nvAmplificationNumViews == NumViews
+      && std::memcmp(m_nvAmplificationInfo.get(), &NvMultiview, sizeof(DxvkNvMultiviewInfo)) == 0;
+
+    if (cacheMatches) {
       static std::atomic<int32_t> s_reuseLogBudget = { 8 };
 
       if (s_reuseLogBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
@@ -456,6 +467,16 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
           VsKey.toString(), " (", m_nvPassthroughIo.size(), " passthrough entries)"));
       }
       return *m_nvAmplificationGs;
+    }
+
+    if (*m_nvAmplificationGs != nullptr) {
+      static std::atomic<int32_t> s_staleLogBudget = { 8 };
+
+      if (s_staleLogBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
+        Logger::info(str::format("NvAmplificationGs: cached companion for ",
+          VsKey.toString(), " no longer matches (was ", *m_nvAmplificationNumViews,
+          " views, now ", NumViews, " views) - rebuilding"));
+      }
     }
 
     Logger::info(str::format("NvAmplificationGs: building companion for ",
@@ -470,6 +491,9 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
 
     *m_nvAmplificationGs = pDevice->GetDXVKDevice()->createCachedShader(
       VsKey.toString() + "_nvAmpGs", nvAmpGsInfo, std::move(converter));
+
+    *m_nvAmplificationNumViews = NumViews;
+    *m_nvAmplificationInfo = NvMultiview;
 
     return *m_nvAmplificationGs;
   }
