@@ -22,11 +22,9 @@ namespace dxvk {
   template <typename ContextType>
   void STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::SetMultiviewModeNV(
       uint32_t NumViews, BOOL IndependentViewportMask) {
-    std::cerr << "[SMP-DIAG-SMV] ENTER (before lock) this=" << (void *)this
-              << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-SMV] ENTER (before lock) this=", (void*)this));
     D3D10DeviceLock lock = m_ctx->LockContext();
-    std::cerr << "[SMP-DIAG-SMV] LOCK ACQUIRED this=" << (void *)this
-              << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-SMV] LOCK ACQUIRED this=", (void*)this));
 
     // ~44% of iRacing's calls are redundant no-op re-sets (recon, handoff
     // section 3): dedupe under the context lock, before the CS stream.
@@ -37,8 +35,7 @@ namespace dxvk {
     if (NumViews == m_ctx->GetNvMultiviewNumViews() &&
         bool(IndependentViewportMask) ==
             m_ctx->GetNvMultiviewIndependentMask()) {
-      std::cerr << "[SMP-DIAG-SMV] EARLY-EXIT (redundant no-op) this="
-                << (void *)this << std::endl;
+      Logger::warn(str::format("[SMP-DIAG-SMV] EARLY-EXIT (redundant no-op) this=", (void*)this));
       return;
     }
 
@@ -58,8 +55,7 @@ namespace dxvk {
          cIndependentMask = bool(IndependentViewportMask)](DxvkContext *ctx) {
           ctx->setNvMultiviewState(cNumViews, cIndependentMask);
         });
-    std::cerr << "[SMP-DIAG-SMV] EXIT (normal) this=" << (void *)this
-              << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-SMV] EXIT (normal) this=", (void*)this));
   }
 
   template<typename ContextType>

@@ -1,4 +1,3 @@
-#include <iostream>
 #include <algorithm>
 
 #include "d3d11_context.h"
@@ -4071,11 +4070,10 @@ namespace dxvk {
                                                        const FLOAT Color[4],
                                                        const D3D11_RECT *pRects,
                                                        UINT NumRects) {
-    std::cerr << "[SMP-DIAG-CIV] ENTER obj=" << (void *)this << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-CIV] ENTER obj=", (void*)this));
     // 3D views are unsupported
     if (View->info().viewType == VK_IMAGE_VIEW_TYPE_3D) {
-      std::cerr << "[SMP-DIAG-CIV] EARLY-EXIT (3D skip) obj=" << (void *)this
-                << std::endl;
+      Logger::warn(str::format("[SMP-DIAG-CIV] EARLY-EXIT (3D skip) obj=", (void*)this));
       return;
     }
 
@@ -4121,8 +4119,7 @@ namespace dxvk {
           }
         });
 
-    std::cerr << "[SMP-DIAG-CIV] MID (queued to CS) obj=" << (void *)this
-              << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-CIV] MID (queued to CS) obj=", (void*)this));
 
     if (NumRects) {
       for (uint32_t i = 0; i < NumRects; i++) {
@@ -4142,7 +4139,7 @@ namespace dxvk {
       vkRect->offset = VkOffset2D { 0, 0 };
       vkRect->extent = extent2D;
     }
-    std::cerr << "[SMP-DIAG-CIV] EXIT obj=" << (void *)this << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-CIV] EXIT obj=", (void*)this));
   }
 
   template<typename ContextType>

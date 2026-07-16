@@ -655,9 +655,8 @@ namespace dxvk {
     if (fence.value() >= value)
       return;
 
-    std::cerr << "[SMP-DIAG-SYNC2] WAIT enter  obj=" << (void *)&fence
-              << " target=" << value << " current=" << fence.value()
-              << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-SYNC2] WAIT enter  obj=", (void*)&fence,
+    " target=", value, " current=", fence.value()));
 
     auto t0 = dxvk::high_resolution_clock::now();
 
@@ -666,8 +665,8 @@ namespace dxvk {
     auto t1 = dxvk::high_resolution_clock::now();
     auto us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0);
 
-    std::cerr << "[SMP-DIAG-SYNC2] WAIT done   obj=" << (void *)&fence
-              << " current=" << fence.value() << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-SYNC2] WAIT done   obj=", (void*)&fence,
+    " current=", fence.value()));
 
     m_statCounters.addCtr(DxvkStatCounter::GpuSyncCount, 1);
     m_statCounters.addCtr(DxvkStatCounter::GpuSyncTicks, us.count());

@@ -113,8 +113,7 @@ extern "C" {
       IDXGISwapChain **ppSwapChain, ID3D11Device **ppDevice,
       D3D_FEATURE_LEVEL *pFeatureLevel,
       ID3D11DeviceContext **ppImmediateContext) {
-    std::cerr << "[SMP-DIAG-SANITY] D3D11InternalCreateDeviceAndSwapChain ENTER"
-              << std::endl;
+    Logger::warn("[SMP-DIAG-SANITY] D3D11InternalCreateDeviceAndSwapChain ENTER");
     InitReturnPtr(ppDevice);
     InitReturnPtr(ppSwapChain);
     InitReturnPtr(ppImmediateContext);

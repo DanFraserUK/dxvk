@@ -1,4 +1,3 @@
-#include <iostream>
 #include <algorithm>
 #include <cstring>
 
@@ -818,7 +817,7 @@ namespace dxvk {
     const DxvkNvMultiviewInfo&    NvMultiview,
           std::vector<DxvkNvPassthroughIoEntry> PassthroughIo,
           ID3D11VertexShader**    ppVertexShader) {
-    std::cerr << "[SMP-DIAG] CreateVertexShaderNvMultiview ENTER this=" << (void*)this << std::endl;
+    Logger::warn(str::format("[SMP-DIAG] CreateVertexShaderNvMultiview ENTER this=", (void*)this));
 
     InitReturnPtr(ppVertexShader);
     D3D11CommonShader module;
@@ -832,24 +831,23 @@ namespace dxvk {
       pShaderBytecode, BytecodeLength, moduleInfo);
 
     if (FAILED(hr)) {
-      std::cerr << "[SMP-DIAG] CreateVertexShaderNvMultiview FAIL hr=0x"
-                << std::hex << hr << std::dec << " this=" << (void *)this
-                << std::endl;
+      Logger::warn(
+          str::format("[SMP-DIAG] CreateVertexShaderNvMultiview FAIL hr=0x",
+                      std::hex, hr, std::dec, " this=", (void *)this));
       return hr;
     }
 
     module.SetNvPassthroughIo(std::move(PassthroughIo));
 
     if (!ppVertexShader) {
-      std::cerr
-          << "[SMP-DIAG] CreateVertexShaderNvMultiview ppVertexShader==NULL"
-          << " this=" << (void *)this << std::endl;
+      Logger::warn(str::format(
+          "[SMP-DIAG] CreateVertexShaderNvMultiview ppVertexShader==NULL",
+          " this=", (void *)this));
       return S_FALSE;
     }
 
     *ppVertexShader = ref(new D3D11VertexShader(this, module));
-    std::cerr << "[SMP-DIAG-CREATESHADER] CreateVertexShaderNvMultiview::S_OK Exit"
-              << (void *)this << std::endl;
+    Logger::warn(str::format("[SMP-DIAG] CreateVertexShaderNvMultiview::S_OK Exit ", (void*)this));
     return S_OK;
   }
 
@@ -898,22 +896,19 @@ namespace dxvk {
       pShaderBytecode, BytecodeLength, moduleInfo);
 
     if (FAILED(hr)) {
-      std::cerr << "[SMP-DIAG-CREATESHADER] CreateGeometryShaderNvMultiview::if (FAILED(hr)) Exit"
-              << (void *)this << std::endl;
-    return hr;
+      Logger::warn(str::format("[SMP-DIAG] CreateGeometryShaderNvMultiview::if (FAILED(hr)) Exit ", (void*)this));
+      return hr;
     }
 
     module.SetNvPassthroughIo(std::move(PassthroughIo));
 
     if (!ppGeometryShader) {
-      std::cerr << "[SMP-DIAG-CREATESHADER] CreateGeometryShaderNvMultiview::if (!ppVertexShader) Exit"
-              << (void *)this << std::endl;
+      Logger::warn(str::format("[SMP-DIAG] CreateGeometryShaderNvMultiview::if (!ppVertexShader) Exit ", (void*)this));
     return S_FALSE;
     }
 
     *ppGeometryShader = ref(new D3D11GeometryShader(this, module));
-    std::cerr << "[SMP-DIAG-CREATESHADER] CreateGeometryShaderNvMultiview::S_OK Exit"
-              << (void *)this << std::endl;
+    Logger::warn(str::format("[SMP-DIAG] CreateGeometryShaderNvMultiview::S_OK Exit ", (void*)this));
     return S_OK;
   }
   
@@ -3420,20 +3415,17 @@ namespace dxvk {
     DxvkNvMultiviewInfo nv = ResolveNvCustomSemantics("VS",
       pShaderBytecode, BytecodeLength, pSemantics, NumSemantics, &passthroughIo);
 
-    std::cerr << "[SMP-DIAG] CreateVertexShaderNvSemantics ENTER enabled="
-              << nv.enabled() << " this=" << (void *)m_device << std::endl;
+    Logger::warn(str::format(
+        "[SMP-DIAG] CreateVertexShaderNvSemantics ENTER enabled=", nv.enabled(),
+        " this=", (void *)m_device));
 
     if (!nv.enabled()) {
-      std::cerr << "[SMP-DIAG] CreateVertexShaderNvSemantics: "
-                   "nv.enabled()==false, calling CreateVertexShader"
-                << std::endl;
+      Logger::warn("[SMP-DIAG] CreateVertexShaderNvSemantics: nv.enabled()==false, calling CreateVertexShader");
       return m_device->CreateVertexShader(pShaderBytecode, BytecodeLength,
                                           pClassLinkage, ppVertexShader);
     }
 
-    std::cerr << "[SMP-DIAG] CreateVertexShaderNvSemantics: "
-                 "nv.enabled()==true, calling CreateVertexShaderNvMultiview"
-              << std::endl;
+    Logger::warn("[SMP-DIAG] CreateVertexShaderNvSemantics: nv.enabled()==true, calling CreateVertexShaderNvMultiview");
 
     return m_device->CreateVertexShaderNvMultiview(
         pShaderBytecode, BytecodeLength, pClassLinkage, nv,

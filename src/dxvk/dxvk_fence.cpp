@@ -98,8 +98,8 @@ namespace dxvk {
   }
 
   void DxvkFence::wait(uint64_t value) {
-    std::cerr << "[SMP-DIAG-SYNC] WAIT enter  obj=" << (void *)this
-              << " target=" << value << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-SYNC] WAIT enter  obj=", (void*)this,
+    " target=", value));
 
     // Watchdog: poll the semaphore's REAL current value once a second
     // while we're blocked below, so we can tell "climbing but too slow"
@@ -113,11 +113,9 @@ namespace dxvk {
         uint64_t current = 0;
         m_vkd->vkGetSemaphoreCounterValue(m_vkd->device(), m_semaphore,
                                           &current);
-        std::cerr << "[SMP-DIAG-SYNC] obj=" << (void *)this
-                  << " target=" << value << " current=" << current
-                  << (current >= value ? "  ** SHOULD BE DONE, BUT ISN'T **"
-                                       : "")
-                  << std::endl;
+        Logger::warn(str::format("[SMP-DIAG-SYNC] obj=", (void*)this,
+        " target=", value, " current=", current,
+        (current >= value ? "  ** SHOULD BE DONE, BUT ISN'T **" : "")));
       }
     });
 
@@ -133,8 +131,7 @@ namespace dxvk {
     if (vr != VK_SUCCESS) {
       Logger::err(str::format("Failed to wait for semaphore: ", vr));
     }
-    std::cerr << "[SMP-DIAG-SYNC] WAIT done   obj=" << (void *)this
-              << std::endl;
+    Logger::warn(str::format("[SMP-DIAG-SYNC] WAIT done   obj=", (void*)this));
   }
 
   void DxvkFence::run() {
