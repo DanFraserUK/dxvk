@@ -97,18 +97,42 @@ namespace dxvk {
     }
   }
 
-  void DxvkFence::wait(uint64_t value) {
-    VkSemaphoreWaitInfo waitInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
-    waitInfo.semaphoreCount = 1;
-    waitInfo.pSemaphores = &m_semaphore;
-    waitInfo.pValues = &value;
-    VkResult vr = m_vkd->vkWaitSemaphores(
-      m_vkd->device(), &waitInfo, ~0ull);
+void DxvkFence::wait(uint64_t value) {
+  std::cerr << "[SMP-DIAG-SYNC] WAIT enter  obj=" << (void*)this
+            << " target=" << value << std::endl;
 
-    if (vr != VK_SUCCESS) {
-      Logger::err(str::format("Failed to wait for semaphore: ", vr));
+  // Watchdog: poll the semaphore's REAL current value once a second
+  // while we're blocked below, so we can tell "climbing but too slow"
+  // apart from "genuinely dead."
+  std::atomic<bool> waitDone{false};
+  std::thread watchdog([this, value, &waitDone] {
+    while (!waitDone.load()) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      if (waitDone.load()) break;
+      uint64_t current = 0;
+      m_vkd->vkGetSemaphoreCounterValue(m_vkd->device(), m_semaphore, &current);
+      std::cerr << "[SMP-DIAG-SYNC] obj=" << (void*)this
+                << " target=" << value << " current=" << current
+                << (current >= value ? "  ** SHOULD BE DONE, BUT ISN'T **" : "")
+                << std::endl;
     }
+  });
+
+  VkSemaphoreWaitInfo waitInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+  waitInfo.semaphoreCount = 1;
+  waitInfo.pSemaphores = &m_semaphore;
+  waitInfo.pValues = &value;
+  VkResult vr = m_vkd->vkWaitSemaphores(
+        m_vkd->device(), &waitInfo, ~0ull);
+
+  waitDone.store(true);
+  watchdog.join();
+
+  if (vr != VK_SUCCESS) {
+    Logger::err(str::format("Failed to wait for semaphore: ", vr));
   }
+  std::cerr << "[SMP-DIAG-SYNC] WAIT done   obj=" << (void*)this << std::endl;
+}
 
   void DxvkFence::run() {
     uint64_t value = 0ull;
