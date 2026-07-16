@@ -19,12 +19,14 @@ namespace dxvk {
     
   }
 
-
-  template<typename ContextType>
+  template <typename ContextType>
   void STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::SetMultiviewModeNV(
-          uint32_t                NumViews,
-          BOOL                    IndependentViewportMask) {
+      uint32_t NumViews, BOOL IndependentViewportMask) {
+    std::cerr << "[SMP-DIAG-SMV] ENTER (before lock) this=" << (void *)this
+              << std::endl;
     D3D10DeviceLock lock = m_ctx->LockContext();
+    std::cerr << "[SMP-DIAG-SMV] LOCK ACQUIRED this=" << (void *)this
+              << std::endl;
 
     // ~44% of iRacing's calls are redundant no-op re-sets (recon, handoff
     // section 3): dedupe under the context lock, before the CS stream.
@@ -32,29 +34,34 @@ namespace dxvk {
     // its own - the Ext class already holds m_ctx, so it can read
     // through that pointer instead of keeping a second copy that could
     // drift out of step with it.
-    if (NumViews == m_ctx->GetNvMultiviewNumViews()
-     && bool(IndependentViewportMask) == m_ctx->GetNvMultiviewIndependentMask())
+    if (NumViews == m_ctx->GetNvMultiviewNumViews() &&
+        bool(IndependentViewportMask) ==
+            m_ctx->GetNvMultiviewIndependentMask()) {
+      std::cerr << "[SMP-DIAG-SMV] EARLY-EXIT (redundant no-op) this="
+                << (void *)this << std::endl;
       return;
+    }
 
     m_ctx->SetNvMultiviewToggleState(NumViews, bool(IndependentViewportMask));
 
     // Budgeted evidence: a handful of transitions per session, not 24k.
-    static std::atomic<int32_t> s_logBudget = { 8 };
+    static std::atomic<int32_t> s_logBudget = {8};
 
     if (s_logBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
       Logger::info(str::format("SetMultiviewModeNV: numViews=", NumViews,
-        " independentMask=", IndependentViewportMask, " (forwarded to CS)"));
+                               " independentMask=", IndependentViewportMask,
+                               " (forwarded to CS)"));
     }
 
-    m_ctx->EmitCs([
-      cNumViews = NumViews,
-      cIndependentMask = bool(IndependentViewportMask)
-    ] (DxvkContext* ctx) {
-      ctx->setNvMultiviewState(cNumViews, cIndependentMask);
-    });
+    m_ctx->EmitCs(
+        [cNumViews = NumViews,
+         cIndependentMask = bool(IndependentViewportMask)](DxvkContext *ctx) {
+          ctx->setNvMultiviewState(cNumViews, cIndependentMask);
+        });
+    std::cerr << "[SMP-DIAG-SMV] EXIT (normal) this=" << (void *)this
+              << std::endl;
   }
-  
-  
+
   template<typename ContextType>
   ULONG STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::AddRef() {
     return m_ctx->AddRef();
