@@ -466,6 +466,8 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         Logger::info(str::format("NvAmplificationGs: reusing cached companion for ",
           VsKey.toString(), " (", m_nvPassthroughIo.size(), " passthrough entries)"));
       }
+      std::cerr << "[SMP-DIAG-CREATESHADER] GetOrCreateNvAmplificationGs::if (cacheMatches) Exit"
+              << (void *)this << std::endl;
       return *m_nvAmplificationGs;
     }
 
@@ -495,6 +497,8 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
     *m_nvAmplificationNumViews = NumViews;
     *m_nvAmplificationInfo = NvMultiview;
 
+    std::cerr << "[SMP-DIAG-CREATESHADER] GetOrCreateNvAmplificationGs::return *m_nvAmplificationGs; Exit"
+              << (void *)this << std::endl;
     return *m_nvAmplificationGs;
   }
 

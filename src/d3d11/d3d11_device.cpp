@@ -828,19 +828,26 @@ namespace dxvk {
       ComputeShaderKey(VK_SHADER_STAGE_VERTEX_BIT, pShaderBytecode, BytecodeLength, NvMultiview),
       pShaderBytecode, BytecodeLength, moduleInfo);
 
-    if (FAILED(hr))
+    if (FAILED(hr)) {
+      std::cerr << "[SMP-DIAG-CREATESHADER] CreateVertexShaderNvMultiview::if (FAILED(hr)) Exit" << (void *)this
+                << std::endl;
       return hr;
+    }
 
     module.SetNvPassthroughIo(std::move(PassthroughIo));
 
-    if (!ppVertexShader)
+    if (!ppVertexShader) {
+      std::cerr << "[SMP-DIAG-CREATESHADER] CreateVertexShaderNvMultiview::if (!ppVertexShader) Exit"
+                << (void *)this << std::endl;
       return S_FALSE;
+    }
 
     *ppVertexShader = ref(new D3D11VertexShader(this, module));
+    std::cerr << "[SMP-DIAG-CREATESHADER] CreateVertexShaderNvMultiview::S_OK Exit"
+              << (void *)this << std::endl;
     return S_OK;
   }
-  
-  
+
   HRESULT STDMETHODCALLTYPE D3D11Device::CreateGeometryShader(
     const void*                       pShaderBytecode,
           SIZE_T                      BytecodeLength,
@@ -885,15 +892,23 @@ namespace dxvk {
       ComputeShaderKey(VK_SHADER_STAGE_GEOMETRY_BIT, pShaderBytecode, BytecodeLength, NvMultiview),
       pShaderBytecode, BytecodeLength, moduleInfo);
 
-    if (FAILED(hr))
-      return hr;
+    if (FAILED(hr)) {
+      std::cerr << "[SMP-DIAG-CREATESHADER] CreateGeometryShaderNvMultiview::if (FAILED(hr)) Exit"
+              << (void *)this << std::endl;
+    return hr;
+    }
 
     module.SetNvPassthroughIo(std::move(PassthroughIo));
 
-    if (!ppGeometryShader)
-      return S_FALSE;
+    if (!ppGeometryShader) {
+      std::cerr << "[SMP-DIAG-CREATESHADER] CreateGeometryShaderNvMultiview::if (!ppVertexShader) Exit"
+              << (void *)this << std::endl;
+    return S_FALSE;
+    }
 
     *ppGeometryShader = ref(new D3D11GeometryShader(this, module));
+    std::cerr << "[SMP-DIAG-CREATESHADER] CreateGeometryShaderNvMultiview::S_OK Exit"
+              << (void *)this << std::endl;
     return S_OK;
   }
   
