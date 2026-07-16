@@ -1115,9 +1115,9 @@ namespace dxvk {
      * \param [in] numViews Number of views (1 = multi-view off)
      * \param [in] independentViewportMask Per-view viewport masks in use
      */
-    void setNvMultiviewState(
-            uint32_t            numViews,
-            bool                independentViewportMask) {
+    void setNvMultiviewState(uint32_t numViews, bool independentViewportMask) {
+      Logger::warn(
+          str::format("[SMP-DIAG-CS] setNvMultiviewState numViews=", numViews));
       m_nvMultiviewNumViews = numViews;
       m_nvMultiviewIndependentMask = independentViewportMask;
     }
