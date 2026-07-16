@@ -651,10 +651,13 @@ namespace dxvk {
     return result;
   }
 
-
-  void DxvkDevice::waitForFence(sync::Fence& fence, uint64_t value) {
+  void DxvkDevice::waitForFence(sync::Fence &fence, uint64_t value) {
     if (fence.value() >= value)
       return;
+
+    std::cerr << "[SMP-DIAG-SYNC2] WAIT enter  obj=" << (void *)&fence
+              << " target=" << value << " current=" << fence.value()
+              << std::endl;
 
     auto t0 = dxvk::high_resolution_clock::now();
 
@@ -663,10 +666,12 @@ namespace dxvk {
     auto t1 = dxvk::high_resolution_clock::now();
     auto us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0);
 
+    std::cerr << "[SMP-DIAG-SYNC2] WAIT done   obj=" << (void *)&fence
+              << " current=" << fence.value() << std::endl;
+
     m_statCounters.addCtr(DxvkStatCounter::GpuSyncCount, 1);
     m_statCounters.addCtr(DxvkStatCounter::GpuSyncTicks, us.count());
   }
-
 
   void DxvkDevice::waitForResource(const DxvkPagedResource& resource, DxvkAccess access) {
     if (resource.isInUse(access)) {
