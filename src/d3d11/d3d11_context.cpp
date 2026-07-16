@@ -4065,16 +4065,18 @@ namespace dxvk {
     }
   }
 
-
-  template<typename ContextType>
-  void D3D11CommonContext<ContextType>::ClearImageView(
-          Rc<DxvkImageView>                 View,
-    const FLOAT                             Color[4],
-    const D3D11_RECT*                       pRects,
-          UINT                              NumRects) {
+  template <typename ContextType>
+  void D3D11CommonContext<ContextType>::ClearImageView(Rc<DxvkImageView> View,
+                                                       const FLOAT Color[4],
+                                                       const D3D11_RECT *pRects,
+                                                       UINT NumRects) {
+    std::cerr << "[SMP-DIAG-CIV] ENTER obj=" << (void *)this << std::endl;
     // 3D views are unsupported
-    if (View->info().viewType == VK_IMAGE_VIEW_TYPE_3D)
+    if (View->info().viewType == VK_IMAGE_VIEW_TYPE_3D) {
+      std::cerr << "[SMP-DIAG-CIV] EARLY-EXIT (3D skip) obj=" << (void *)this
+                << std::endl;
       return;
+    }
 
     // Convert clear value
     auto clearValue = ConvertColorValue(Color, View->formatInfo());
@@ -4090,27 +4092,36 @@ namespace dxvk {
       plane = &imageFormatInfo->planes[vk::getPlaneIndex(View->info().aspects)];
 
     // Clear all non-empty rectangles
-    EmitCsCmd<VkRect2D>(D3D11CmdType::None, std::max(NumRects, 1u), [
-      cView       = std::move(View),
-      cClearValue = clearValue
-    ] (DxvkContext* ctx, const VkRect2D* rects, size_t count) {
-      constexpr VkImageUsageFlags rtUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-      VkImageAspectFlags clearAspect = cView->formatInfo()->aspectMask & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT);
+    EmitCsCmd<VkRect2D>(
+        D3D11CmdType::None, std::max(NumRects, 1u),
+        [cView = std::move(View), cClearValue = clearValue](
+            DxvkContext *ctx, const VkRect2D *rects, size_t count) {
+          constexpr VkImageUsageFlags rtUsage =
+              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+          VkImageAspectFlags clearAspect =
+              cView->formatInfo()->aspectMask &
+              (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT);
 
-      for (size_t i = 0; i < count; i++) {
-        VkOffset3D offset = { rects[i].offset.x, rects[i].offset.y, 0 };
-        VkExtent3D extent = { rects[i].extent.width, rects[i].extent.height, 1u };
+          for (size_t i = 0; i < count; i++) {
+            VkOffset3D offset = {rects[i].offset.x, rects[i].offset.y, 0};
+            VkExtent3D extent = {rects[i].extent.width, rects[i].extent.height,
+                                 1u};
 
-        if (extent.width && extent.height) {
-          bool isFullSize = cView->mipLevelExtent(0) == extent;
+            if (extent.width && extent.height) {
+              bool isFullSize = cView->mipLevelExtent(0) == extent;
 
-          if ((cView->info().usage & rtUsage) && isFullSize)
-            ctx->clearRenderTarget(cView, clearAspect, cClearValue, 0u);
-          else
-            ctx->clearImageView(cView, offset, extent, clearAspect, cClearValue);
-        }
-      }
-    });
+              if ((cView->info().usage & rtUsage) && isFullSize)
+                ctx->clearRenderTarget(cView, clearAspect, cClearValue, 0u);
+              else
+                ctx->clearImageView(cView, offset, extent, clearAspect,
+                                    cClearValue);
+            }
+          }
+        });
+
+    std::cerr << "[SMP-DIAG-CIV] MID (queued to CS) obj=" << (void *)this
+              << std::endl;
 
     if (NumRects) {
       for (uint32_t i = 0; i < NumRects; i++) {
@@ -4130,8 +4141,8 @@ namespace dxvk {
       vkRect->offset = VkOffset2D { 0, 0 };
       vkRect->extent = extent2D;
     }
+    std::cerr << "[SMP-DIAG-CIV] EXIT obj=" << (void *)this << std::endl;
   }
-
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ClearBufferView(
