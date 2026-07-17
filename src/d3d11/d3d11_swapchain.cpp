@@ -252,6 +252,7 @@ namespace dxvk {
           UINT                      SyncInterval,
           UINT                      PresentFlags,
     const DXGI_PRESENT_PARAMETERS*  pPresentParameters) {
+    Logger::warn("[SMP-DIAG-PRESENT] ENTER");
     HRESULT hr = S_OK;
 
     if (m_device->getDeviceStatus() != VK_SUCCESS)
@@ -267,6 +268,7 @@ namespace dxvk {
 
     if (hr != S_OK) {
       SyncFrameLatency();
+      Logger::warn("[SMP-DIAG-PRESENT] EXIT (device reset)");
       return hr;
     }
 
@@ -294,6 +296,7 @@ namespace dxvk {
     if (m_latencyHud)
       m_latencyHud->accumulateStats(latencyStats);
 
+    Logger::warn(str::format("[SMP-DIAG-PRESENT] EXIT (normal) hr=", hr));
     return hr;
   }
 
@@ -392,15 +395,20 @@ namespace dxvk {
     Rc<DxvkImage> backBuffer;
 
     VkResult status = m_presenter->acquireNextImage(sync, backBuffer);
+    Logger::warn(str::format("[SMP-DIAG-PRESENTIMG] acquireNextImage status=", status));
 
     if (status != VK_SUCCESS && m_latency)
       m_latency->discardTimings();
 
-    if (status < 0)
+    if (status < 0) {
+      Logger::warn("[SMP-DIAG-PRESENTIMG] EXIT E_FAIL (status<0)");
       return E_FAIL;
+    }
 
-    if (status == VK_NOT_READY)
+    if (status == VK_NOT_READY) {
+      Logger::warn("[SMP-DIAG-PRESENTIMG] EXIT OCCLUDED (VK_NOT_READY)");
       return DXGI_STATUS_OCCLUDED;
+    }
 
     m_frameId += 1;
 
@@ -468,6 +476,7 @@ namespace dxvk {
       }
     }
 
+    Logger::warn("[SMP-DIAG-PRESENTIMG] EXIT S_OK (normal present path)");
     return S_OK;
   }
 
