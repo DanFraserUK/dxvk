@@ -23,6 +23,7 @@ namespace dxvk {
   void STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::SetMultiviewModeNV(
       uint32_t NumViews, BOOL IndependentViewportMask) {
     Logger::warn(str::format("[SMP-DIAG-SMV] ENTER (before lock) this=", (void*)this));
+    Logger::warn(str::format("[SMP-DIAG-CALLER] retaddr=", __builtin_return_address(0)));
     D3D10DeviceLock lock = m_ctx->LockContext();
     Logger::warn(str::format("[SMP-DIAG-SMV] LOCK ACQUIRED this=", (void*)this));
 
