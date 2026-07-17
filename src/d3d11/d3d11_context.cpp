@@ -1025,12 +1025,13 @@ namespace dxvk {
     if (unlikely(!VertexCount))
       return;
 
-    VkDrawIndirectCommand draw = { };
-    draw.vertexCount   = VertexCount;
+    VkDrawIndirectCommand draw = {};
+    draw.vertexCount = VertexCount;
     draw.instanceCount = 1u;
-    draw.firstVertex   = StartVertexLocation;
+    draw.firstVertex = StartVertexLocation;
     draw.firstInstance = 0u;
 
+    m_smpDiagDrawCount++;
     BatchDraw(draw);
   }
 
@@ -1052,6 +1053,7 @@ namespace dxvk {
     draw.vertexOffset  = BaseVertexLocation;
     draw.firstInstance = 0u;
 
+    m_smpDiagDrawCount++;
     BatchDrawIndexed(draw);
   }
 
@@ -1423,8 +1425,12 @@ namespace dxvk {
             m_parent, commonShader->GetShaderKey(), liveNumViews,
             irShader->getShaderCreateInfo().nvMultiview);
 
-          EmitCs([cShader = ampGs] (DxvkContext* ctx) {
-            ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(Rc<DxvkShader>(cShader));
+          Logger::warn(str::format(
+              "[SMP-DIAG-AUTOATTACH] shader=", dxvkShader->debugName(),
+              " liveNumViews=", liveNumViews, " ampGs=", ampGs.ptr()));
+          EmitCs([cShader = ampGs](DxvkContext *ctx) {
+            ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(
+                Rc<DxvkShader>(cShader));
           });
         }
       }
@@ -3554,15 +3560,17 @@ namespace dxvk {
   }
 
 
-  template<typename ContextType>
+  template <typename ContextType>
   void D3D11CommonContext<ContextType>::BatchDraw(
-    const VkDrawIndirectCommand&            draw) {
+      const VkDrawIndirectCommand &draw) {
+    m_smpDiagDrawCount++;
+
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
 
     // Batch consecutive draws if there are no state changes
     if (m_csDataType == D3D11CmdType::Draw) {
-      auto* drawInfo = m_csChunk->pushData(m_csData, 1u);
+      auto *drawInfo = m_csChunk->pushData(m_csData, 1u);
 
       if (likely(drawInfo)) {
         new (drawInfo) VkDrawIndirectCommand(draw);
@@ -3570,10 +3578,11 @@ namespace dxvk {
       }
     }
 
-    EmitCsCmd<VkDrawIndirectCommand>(D3D11CmdType::Draw, 1u,
-      [] (DxvkContext* ctx, const VkDrawIndirectCommand* draws, size_t count) {
-        ctx->draw(count, draws);
-      });
+    EmitCsCmd<VkDrawIndirectCommand>(
+        D3D11CmdType::Draw, 1u,
+        [](DxvkContext *ctx, const VkDrawIndirectCommand *draws, size_t count) {
+          ctx->draw(count, draws);
+        });
 
     new (m_csData->first()) VkDrawIndirectCommand(draw);
   }
@@ -3582,6 +3591,8 @@ namespace dxvk {
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BatchDrawIndexed(
     const VkDrawIndexedIndirectCommand&     draw) {
+    m_smpDiagDrawCount++;
+
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
 

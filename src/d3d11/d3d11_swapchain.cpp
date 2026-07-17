@@ -476,6 +476,7 @@ namespace dxvk {
       }
     }
 
+    Logger::warn(str::format("[SMP-DIAG-DRAWCOUNT] count=", immediateContext->GetAndResetSmpDiagDrawCount()));
     Logger::warn("[SMP-DIAG-PRESENTIMG] EXIT S_OK (normal present path)");
     return S_OK;
   }

@@ -112,6 +112,12 @@ namespace dxvk {
       return m_nvMultiviewIndependentMask;
     }
 
+    uint64_t GetAndResetSmpDiagDrawCount() {
+      auto c = m_smpDiagDrawCount;
+      m_smpDiagDrawCount = 0u;
+      return c;
+    }
+
     HRESULT STDMETHODCALLTYPE QueryInterface(
             REFIID  riid,
             void**  ppvObject);
@@ -1282,9 +1288,10 @@ namespace dxvk {
     }
 
   private:
-
     uint32_t m_nvMultiviewNumViews = 1u;
-    bool     m_nvMultiviewIndependentMask = false;
+    bool m_nvMultiviewIndependentMask = false;
+
+    uint64_t m_smpDiagDrawCount = 0u;
 
     ContextType* GetTypedContext() {
       return static_cast<ContextType*>(this);
