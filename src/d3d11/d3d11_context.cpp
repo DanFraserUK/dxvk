@@ -2499,6 +2499,14 @@ namespace dxvk {
     const D3D11_VIEWPORT*                   pViewports) {
     D3D10DeviceLock lock = LockContext();
 
+    {
+      static std::atomic<uint64_t> s_smpDiagViewportCalls{0};
+      uint64_t n =
+          s_smpDiagViewportCalls.fetch_add(1, std::memory_order_relaxed) + 1;
+      Logger::info(str::format("[SMP-DIAG-VIEWPORTSET] count=", n,
+                               " numViewports=", NumViewports));
+    }
+
     if (unlikely(NumViewports > m_state.rs.viewports.size()))
       return;
 
