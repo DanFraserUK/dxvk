@@ -214,10 +214,16 @@ namespace dxvk {
       fenceInfo.pNext = const_cast<void*>(std::exchange(info.pNext, &fenceInfo));
     }
 
-    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: PRESENT about to call vkQueuePresentKHR"));
+    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(),
+                             "]: PRESENT about to call vkQueuePresentKHR"
+                             " frameId=",
+                             frameId, " imageIndex=", m_imageIndex,
+                             " frameIndexSlot=", m_frameIndex));
     VkResult status = m_vkd->vkQueuePresentKHR(
-      m_device->queues().graphics.queueHandle, &info);
-    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(), "]: PRESENT returned, status=", status));
+        m_device->queues().graphics.queueHandle, &info);
+    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(),
+                             "]: PRESENT returned, status=", status,
+                             " imageIndex=", m_imageIndex));
 
     // Maintain valid state if presentation succeeded, even if we want to
     // recreate the swapchain. Spec says that 'queue' operations, i.e. the
