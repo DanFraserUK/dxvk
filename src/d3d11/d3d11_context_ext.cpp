@@ -10,6 +10,8 @@
 
 #include "../util/log/log.h"
 
+#include <type_traits>
+
 namespace dxvk {
   
   template<typename ContextType>
@@ -56,6 +58,19 @@ namespace dxvk {
          cIndependentMask = bool(IndependentViewportMask)](DxvkContext *ctx) {
           ctx->setNvMultiviewState(cNumViews, cIndependentMask);
         });
+
+    // H3 TEST 2 (THREAD_B_H3_PLAN.md) — forced-sync probe. Only compiles/runs
+    // for the immediate context, since SynchronizeCsThread doesn't exist on
+    // the deferred context. Closes the two-whiteboard window immediately
+    // after every genuine (non-redundant) count change, before anything
+    // else gets queued against the new value. TEMPORARY — revert after
+    // reading the result, per BUILD_TEST_REVERT_WORKFLOW.md.
+    if constexpr (std::is_same_v<ContextType, D3D11ImmediateContext>) {
+      Logger::warn(str::format("[SMP-DIAG-H3SYNC] ENTER this=", (void*)this));
+      m_ctx->SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
+      Logger::warn(str::format("[SMP-DIAG-H3SYNC] EXIT this=", (void*)this));
+    }
+
     Logger::warn(str::format("[SMP-DIAG-SMV] EXIT (normal) this=", (void*)this));
   }
 
