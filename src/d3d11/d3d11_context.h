@@ -97,9 +97,9 @@ namespace dxvk {
      * already uses. Read back by Milestone 4.C's auto-attach check -
      * this is the one true copy; nothing else keeps its own.
      */
-    void SetNvMultiviewToggleState(
-            uint32_t                NumViews,
-            bool                    IndependentMask) {
+    void SetNvMultiviewToggleState(uint32_t NumViews, bool IndependentMask) {
+      Logger::warn(
+          str::format("[SMP-DIAG-VIEWS] main-thread count -> ", NumViews));
       m_nvMultiviewNumViews = NumViews;
       m_nvMultiviewIndependentMask = IndependentMask;
     }

@@ -4089,7 +4089,8 @@ namespace dxvk {
                                                        const FLOAT Color[4],
                                                        const D3D11_RECT *pRects,
                                                        UINT NumRects) {
-    Logger::warn(str::format("[SMP-DIAG-CIV] ENTER obj=", (void*)this));
+    Logger::warn(str::format("[SMP-DIAG-CIV] ENTER obj=", (void *)this,
+                             " mainThreadViews=", m_nvMultiviewNumViews));
     // 3D views are unsupported
     if (View->info().viewType == VK_IMAGE_VIEW_TYPE_3D) {
       Logger::warn(str::format("[SMP-DIAG-CIV] EARLY-EXIT (3D skip) obj=", (void*)this));
