@@ -390,25 +390,33 @@ namespace dxvk {
       m_implicitResolves.invalidate(*imageView->image(), subresources);
     }
   }
-  
-  
-  void DxvkContext::clearImageView(
-    const Rc<DxvkImageView>&    imageView,
-          VkOffset3D            offset,
-          VkExtent3D            extent,
-          VkImageAspectFlags    aspect,
-          VkClearValue          value) {
+
+
+  void DxvkContext::clearImageView(const Rc<DxvkImageView> &imageView,
+                                   VkOffset3D offset, VkExtent3D extent,
+                                   VkImageAspectFlags aspect,
+                                   VkClearValue value) {
     const VkImageUsageFlags viewUsage = imageView->info().usage;
 
+    Logger::warn(str::format("[SMP-DIAG-CIV2] t=", smpDiagNowMs(),
+                             " ENTER csThreadViews=", m_nvMultiviewNumViews,
+                             " viewUsage=", viewUsage));
+
     if (aspect & VK_IMAGE_ASPECT_COLOR_BIT) {
-      value.color = util::swizzleClearColor(value.color,
-        util::invertComponentMapping(imageView->info().unpackSwizzle()));
+      value.color = util::swizzleClearColor(
+          value.color,
+          util::invertComponentMapping(imageView->info().unpackSwizzle()));
     }
-    
-    if (viewUsage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
+    if (viewUsage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+      Logger::warn(str::format("[SMP-DIAG-CIV2] t=", smpDiagNowMs(),
+                               " -> clearImageViewFb"));
       this->clearImageViewFb(imageView, offset, extent, aspect, value);
-    else if (viewUsage & VK_IMAGE_USAGE_STORAGE_BIT)
+    } else if (viewUsage & VK_IMAGE_USAGE_STORAGE_BIT) {
+      Logger::warn(str::format("[SMP-DIAG-CIV2] t=", smpDiagNowMs(),
+                               " -> clearImageViewCs"));
       this->clearImageViewCs(imageView, offset, extent, value);
+    }
 
     if (imageView->isMultisampled()) {
       auto subresources = imageView->imageSubresources();
@@ -417,7 +425,7 @@ namespace dxvk {
       m_implicitResolves.invalidate(*imageView->image(), subresources);
     }
   }
-  
+
   
   void DxvkContext::copyBuffer(
     const Rc<DxvkBuffer>&       dstBuffer,
