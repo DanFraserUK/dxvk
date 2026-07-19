@@ -12,6 +12,8 @@
 #include "dxvk_queue.h"
 #include "dxvk_util.h"
 
+#include <chrono>
+
 namespace dxvk {
 
   /**
@@ -1103,9 +1105,14 @@ namespace dxvk {
      * and updates the values if necessary.
      * \param [in] depthBounds Depth bounds
      */
-    void setDepthBounds(
-            DxvkDepthBounds     depthBounds);
-    
+    void setDepthBounds(DxvkDepthBounds depthBounds);
+
+    static int64_t smpDiagNowMs() {
+      return std::chrono::duration_cast<std::chrono::milliseconds>(
+                 std::chrono::steady_clock::now().time_since_epoch())
+          .count();
+    }
+
     /**
      * \brief Sets NVAPI multi-view state
      *
@@ -1116,8 +1123,8 @@ namespace dxvk {
      * \param [in] independentViewportMask Per-view viewport masks in use
      */
     void setNvMultiviewState(uint32_t numViews, bool independentViewportMask) {
-      Logger::warn(
-          str::format("[SMP-DIAG-CS] setNvMultiviewState numViews=", numViews));
+      Logger::warn(str::format("[SMP-DIAG-CS] t=", smpDiagNowMs(),
+                               " setNvMultiviewState numViews=", numViews));
       m_nvMultiviewNumViews = numViews;
       m_nvMultiviewIndependentMask = independentViewportMask;
     }

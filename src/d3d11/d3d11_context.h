@@ -21,6 +21,8 @@
 #include "d3d11_device_child.h"
 #include "d3d11_texture.h"
 
+#include <chrono>
+
 namespace dxvk {
 
   class D3D11DeferredContext;
@@ -89,6 +91,12 @@ namespace dxvk {
 
     ~D3D11CommonContext();
 
+    static int64_t smpDiagNowMs() {
+      return std::chrono::duration_cast<std::chrono::milliseconds>(
+                 std::chrono::steady_clock::now().time_since_epoch())
+          .count();
+    }
+
     /**
      * \brief Sets NVAPI multi-view toggle state
      *
@@ -98,8 +106,8 @@ namespace dxvk {
      * this is the one true copy; nothing else keeps its own.
      */
     void SetNvMultiviewToggleState(uint32_t NumViews, bool IndependentMask) {
-      Logger::warn(
-          str::format("[SMP-DIAG-VIEWS] main-thread count -> ", NumViews));
+      Logger::warn(str::format("[SMP-DIAG-VIEWS] t=", smpDiagNowMs(),
+                               " main-thread count -> ", NumViews));
       m_nvMultiviewNumViews = NumViews;
       m_nvMultiviewIndependentMask = IndependentMask;
     }
