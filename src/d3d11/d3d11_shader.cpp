@@ -158,7 +158,7 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
           if (!positionPerViewPerVertex[view][v])
             continue;
           auto isThisView = builder.add(ir::Op::IEq(
-            ir::ScalarType::eU32, instanceId, builder.makeConstant(view)));
+            ir::ScalarType::eBool, instanceId, builder.makeConstant(view)));
           chosen = builder.add(ir::Op::Select(
             ir::Type(ir::BasicType(ir::ScalarType::eF32, 4u)),
             isThisView, positionPerViewPerVertex[view][v], chosen));

@@ -14,6 +14,13 @@
 
 namespace dxvk {
   
+  // H4A TEST — local timestamp helper, matching dxvk_queue.cpp's convention.
+  // TEMPORARY — revert once H4a is confirmed or fully killed.
+  static int64_t smpDiagSmvNowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+  
   template<typename ContextType>
   D3D11DeviceContextExt<ContextType>::D3D11DeviceContextExt(
           ContextType*          pContext)
@@ -24,10 +31,10 @@ namespace dxvk {
   template <typename ContextType>
   void STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::SetMultiviewModeNV(
       uint32_t NumViews, BOOL IndependentViewportMask) {
-    Logger::warn(str::format("[SMP-DIAG-SMV] ENTER (before lock) this=", (void*)this));
+    Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " ENTER (before lock) this=", (void*)this));
     Logger::warn(str::format("[SMP-DIAG-CALLER] retaddr=", __builtin_return_address(0)));
     D3D10DeviceLock lock = m_ctx->LockContext();
-    Logger::warn(str::format("[SMP-DIAG-SMV] LOCK ACQUIRED this=", (void*)this));
+    Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " LOCK ACQUIRED this=", (void*)this));
 
     // ~44% of iRacing's calls are redundant no-op re-sets (recon, handoff
     // section 3): dedupe under the context lock, before the CS stream.
@@ -38,7 +45,7 @@ namespace dxvk {
     if (NumViews == m_ctx->GetNvMultiviewNumViews() &&
         bool(IndependentViewportMask) ==
             m_ctx->GetNvMultiviewIndependentMask()) {
-      Logger::warn(str::format("[SMP-DIAG-SMV] EARLY-EXIT (redundant no-op) this=", (void*)this));
+      Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " EARLY-EXIT (redundant no-op) this=", (void*)this));
       return;
     }
 
@@ -71,7 +78,7 @@ namespace dxvk {
       Logger::warn(str::format("[SMP-DIAG-H3SYNC] EXIT this=", (void*)this));
     }
 
-    Logger::warn(str::format("[SMP-DIAG-SMV] EXIT (normal) this=", (void*)this));
+    Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " EXIT (normal) this=", (void*)this));
   }
 
   template<typename ContextType>
