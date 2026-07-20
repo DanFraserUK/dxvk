@@ -1301,6 +1301,12 @@ namespace dxvk {
 
     uint64_t m_smpDiagDrawCount = 0u;
 
+    // True if the currently-bound geometry shader is one WE injected via
+    // the NV multiview auto-attach path, rather than something the app
+    // itself bound through GSSetShader. Lets VSSetShader tell "nothing to
+    // do" apart from "we need to clear our own leftover injection."
+    bool m_nvAmpGsAutoAttached = false;
+
     ContextType* GetTypedContext() {
       return static_cast<ContextType*>(this);
     }

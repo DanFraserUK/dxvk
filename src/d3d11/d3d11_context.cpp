@@ -1399,40 +1399,75 @@ namespace dxvk {
     // app HAS bound a GS (the 15 vpMask=1 shaders), it already carries
     // its own nvMultiview metadata and broadcasting it is T-C.2 -
     // untouched here.
-    if (shader && !m_state.gs) {
+    //
+    // This block used to only ever ACT when the multiview condition
+    // was true - binding the companion GS with nothing to undo the
+    // bind later. Any subsequent draw using a VS without multiview
+    // metadata silently kept whatever companion GS was last injected,
+    // corrupting completely unrelated draws for the rest of the frame.
+    // Real D3D11 GSSetShader never has this problem, because every
+    // call to it explicitly and unconditionally decides the full
+    // state - bind X, or bind NULL, never "leave it as it was". This
+    // block now does the same: resolve the intended state on every
+    // single VSSetShader call, and always emit whatever that decision
+    // requires, including clearing our own earlier injection.
+    if (shader) {
       auto* commonShader = GetCommonShader(shader);
+      bool hasNvMultiview = false;
+      Rc<DxvkShader> dxvkShader;
+      DxvkIrShader* irShader = nullptr;
 
       if (commonShader != nullptr) {
-        auto dxvkShader = commonShader->GetShader();
-        auto irShader = dxvkShader != nullptr
+        dxvkShader = commonShader->GetShader();
+        irShader = dxvkShader != nullptr
           ? static_cast<DxvkIrShader*>(dxvkShader.ptr())
           : nullptr;
-        bool hasNvMultiview = irShader != nullptr
+        hasNvMultiview = irShader != nullptr
           && irShader->getShaderCreateInfo().nvMultiview.enabled();
+      }
 
-        uint32_t liveNumViews = GetNvMultiviewNumViews();
+      uint32_t liveNumViews = GetNvMultiviewNumViews();
+      bool wantAmpGs = !m_state.gs && commonShader != nullptr
+        && hasNvMultiview && liveNumViews > 1u;
 
-        if (hasNvMultiview && liveNumViews > 1u) {
-          static std::atomic<int32_t> s_attachLogBudget = { 8 };
+      if (wantAmpGs) {
+        static std::atomic<int32_t> s_attachLogBudget = { 8 };
 
-          if (s_attachLogBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
-            Logger::info(str::format("NvAmplificationGs: auto-attach for VS ",
-              dxvkShader->debugName(), " (", commonShader->GetNvPassthroughIo().size(),
-              " passthrough entries, ", liveNumViews, " live views)"));
-          }
-
-          auto ampGs = commonShader->GetOrCreateNvAmplificationGs(
-            m_parent, commonShader->GetShaderKey(), liveNumViews,
-            irShader->getShaderCreateInfo().nvMultiview);
-
-          Logger::warn(str::format(
-              "[SMP-DIAG-AUTOATTACH] shader=", dxvkShader->debugName(),
-              " liveNumViews=", liveNumViews, " ampGs=", ampGs.ptr()));
-          EmitCs([cShader = ampGs](DxvkContext *ctx) {
-            ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(
-                Rc<DxvkShader>(cShader));
-          });
+        if (s_attachLogBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
+          Logger::info(str::format("NvAmplificationGs: auto-attach for VS ",
+            dxvkShader->debugName(), " (", commonShader->GetNvPassthroughIo().size(),
+            " passthrough entries, ", liveNumViews, " live views)"));
         }
+
+        auto ampGs = commonShader->GetOrCreateNvAmplificationGs(
+          m_parent, commonShader->GetShaderKey(), liveNumViews,
+          irShader->getShaderCreateInfo().nvMultiview);
+
+        Logger::warn(str::format(
+            "[SMP-DIAG-AUTOATTACH] shader=", dxvkShader->debugName(),
+            " liveNumViews=", liveNumViews, " ampGs=", ampGs.ptr()));
+        EmitCs([cShader = ampGs](DxvkContext *ctx) {
+          ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(
+              Rc<DxvkShader>(cShader));
+        });
+        m_nvAmpGsAutoAttached = true;
+      } else if (m_nvAmpGsAutoAttached && !m_state.gs) {
+        // We previously injected a companion GS and this draw's own
+        // VS doesn't need one - clear it explicitly rather than
+        // letting it silently ride onto a draw it has nothing to do
+        // with. (!m_state.gs here confirms the app hasn't bound its
+        // own real GS in the meantime; if it had, GSSetShader's own
+        // normal bind already replaced whatever we injected, correctly,
+        // through the ordinary pathway.)
+        EmitCs([](DxvkContext *ctx) {
+          ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(Rc<DxvkShader>());
+        });
+        m_nvAmpGsAutoAttached = false;
+      } else if (m_state.gs) {
+        // App has a real GS of its own bound - not ours to touch.
+        // Keep our own bookkeeping honest: we are not the one
+        // controlling the geometry shader stage right now.
+        m_nvAmpGsAutoAttached = false;
       }
     }
   }
@@ -1840,6 +1875,7 @@ namespace dxvk {
 
     if (m_state.gs != shader) {
       m_state.gs = shader;
+      m_nvAmpGsAutoAttached = false;
 
       BindShader<D3D11ShaderType::eGeometry>(GetCommonShader(shader));
     }
@@ -4999,6 +5035,7 @@ namespace dxvk {
     m_state.hs = nullptr;
     m_state.ds = nullptr;
     m_state.gs = nullptr;
+    m_nvAmpGsAutoAttached = false;
     m_state.ps = nullptr;
     m_state.cs = nullptr;
 
