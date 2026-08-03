@@ -3344,12 +3344,20 @@ namespace dxvk {
             isNvInterop = true;
         }
 
-        if (!isNvInterop) {
-          pPassthroughIo->push_back({
-            uint32_t(e->getRegisterIndex()), e->getVectorType(),
-            std::string(e->getSemanticName()), e->getSemanticIndex()
-          });
-        }
+        if (isNvInterop)
+          continue;
+
+        // SV_POSITION rides the Position built-in on the vertex shader,
+        // not a generic location. The amplification GS declares it as a
+        // built-in input separately.
+        if (e->matches("SV_POSITION"))
+          continue;
+
+        pPassthroughIo->push_back({
+          uint32_t(e->getRegisterIndex()), e->getVectorType(),
+          std::string(e->getSemanticName()), e->getSemanticIndex(),
+          e->computeComponentIndex()
+        });
       }
 
       Logger::info(str::format("NvSemantics(", ShaderType, ", ",

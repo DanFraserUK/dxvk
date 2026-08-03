@@ -25,13 +25,15 @@ namespace dxvk {
    * registers themselves (position-view family, viewport masks), only
    * the plain registers a rasterizer/PS reads.
    */
-  struct DxvkNvPassthroughIoEntry {
-    uint32_t                regIndex      = 0u;
-    dxbc_spv::ir::BasicType  type          = dxbc_spv::ir::BasicType();
-    std::string              semanticName  = { };
-    uint32_t                 semanticIndex = 0u;
-  };
-
+struct DxvkNvPassthroughIoEntry {
+  uint32_t regIndex = 0u;
+  dxbc_spv::ir::BasicType type = dxbc_spv::ir::BasicType();
+  std::string semanticName = {};
+  uint32_t semanticIndex = 0u;
+  /// First written component. Two signature entries can share a register
+  /// with different write masks; both need this to be declared correctly.
+  uint32_t component = 0u;
+};
 
   /**
    * \brief NVAPI multi-view semantic mapping

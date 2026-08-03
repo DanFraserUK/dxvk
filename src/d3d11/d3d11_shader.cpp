@@ -77,17 +77,13 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
       // captured entry carried through unchanged, at its OWN component
       // count (the resolver's getVectorType() - never a fixed float4).
       //
-      // Location assignment: io.regIndex is the ORIGINAL vertex shader's
-      // output register number - it has nothing to do with this shader's
-      // OWN interface and must never be reused as a location here. Fresh,
-      // locally-tracked counters instead: inputs advance by 3 (each is an
-      // array of 3, one per triangle corner, and an arrayed GS input
-      // consumes one location PER ARRAY ELEMENT - 3 consecutive locations,
-      // not 1), outputs advance by 1 (a single value, no array widening).
-      // Input and output locations are independent SPIR-V namespaces, so
-      // there's no need to keep the two counters in sync with each other.
-      uint32_t nextInputLocation = 0u;
-      uint32_t nextOutputLocation = 0u;
+      // Location assignment: use the source register index and component
+      // offset directly. A geometry shader's input interface has to match
+      // the vertex shader output interface it consumes, and DXVK numbers
+      // vertex shader outputs by register index. Two signature entries can
+      // share a register with different write masks, in which case they
+      // share a location and differ by component; renumbering sequentially
+      // loses that pairing and slides every later location.
 
       // Collect every passthrough attribute's per-corner value AND its
       // output declaration here, instead of writing to the output the
@@ -96,13 +92,26 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
       std::vector<ir::SsaDef> passthroughOutDecls;
       std::vector<std::array<ir::SsaDef, 3u>> passthroughValuesPerVertex;
 
+      // View 0's position is SV_POSITION, which the vertex shader emits as
+      // the Position built-in rather than at a generic location. It is
+      // excluded from m_passthroughIo for that reason and read here.
+      auto positionInDecl = builder.add(ir::Op::DclInputBuiltIn(
+        ir::Type(ir::BasicType(ir::ScalarType::eF32, 4u)).addArrayDimension(3u),
+        entryPoint, ir::BuiltIn::ePosition, ir::InterpolationModes()));
+
+      for (uint32_t v = 0u; v < 3u; v++) {
+        positionPerViewPerVertex[0][v] = builder.add(ir::Op::InputLoad(
+          ir::Type(ir::BasicType(ir::ScalarType::eF32, 4u)),
+          positionInDecl, builder.makeConstant(v)));
+      }
+
       for (const auto& io : m_passthroughIo) {
         auto inputType = ir::Type(io.type).addArrayDimension(3u);
 
         auto inDecl = builder.add(ir::Op::DclInput(
-          inputType, entryPoint, nextInputLocation, 0u));
+          inputType, entryPoint, io.regIndex, io.component));
         auto outDecl = builder.add(ir::Op::DclOutput(
-          ir::Type(io.type), entryPoint, nextOutputLocation, 0u));
+          ir::Type(io.type), entryPoint, io.regIndex, io.component));
 
         builder.add(ir::Op::Semantic(inDecl, io.semanticIndex, io.semanticName.c_str()));
         builder.add(ir::Op::Semantic(outDecl, io.semanticIndex, io.semanticName.c_str()));
@@ -111,16 +120,10 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         for (uint32_t v = 0u; v < 3u; v++) {
           values[v] = builder.add(ir::Op::InputLoad(
             ir::Type(io.type), inDecl, builder.makeConstant(v)));
-
-          if (str::compareCaseInsensitive(io.semanticName.c_str(), "SV_POSITION"))
-            positionPerViewPerVertex[0][v] = values[v];
         }
 
         passthroughOutDecls.push_back(outDecl);
         passthroughValuesPerVertex.push_back(values);
-
-        nextInputLocation += 1u;
-        nextOutputLocation += 1u;
       }
 
       // Per-view custom position registers: unchanged. This part only
@@ -136,14 +139,14 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
 
         auto viewPosType = m_nvMultiview.positionViewType[view];
         auto viewPosDecl = builder.add(ir::Op::DclInput(
-          ir::Type(viewPosType).addArrayDimension(3u), entryPoint, nextInputLocation, 0u));
+          ir::Type(viewPosType).addArrayDimension(3u), entryPoint,
+          uint32_t(m_nvMultiview.positionViewReg[view]), 0u));
         builder.add(ir::Op::Semantic(viewPosDecl, 0u, s_positionViewSemanticNames[view]));
 
         for (uint32_t v = 0u; v < 3u; v++) {
           positionPerViewPerVertex[view + 1][v] = builder.add(ir::Op::InputLoad(
             ir::Type(viewPosType), viewPosDecl, builder.makeConstant(v)));
         }
-        nextInputLocation += 1u;
       }
 
       // Compute each corner's chosen position (same Select/IEq logic as
