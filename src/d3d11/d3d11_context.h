@@ -21,8 +21,6 @@
 #include "d3d11_device_child.h"
 #include "d3d11_texture.h"
 
-#include <chrono>
-
 namespace dxvk {
 
   class D3D11DeferredContext;
@@ -91,12 +89,6 @@ namespace dxvk {
 
     ~D3D11CommonContext();
 
-    static int64_t smpDiagNowMs() {
-      return std::chrono::duration_cast<std::chrono::milliseconds>(
-                 std::chrono::steady_clock::now().time_since_epoch())
-          .count();
-    }
-
     /**
      * \brief Sets NVAPI multi-view toggle state
      *
@@ -106,8 +98,6 @@ namespace dxvk {
      * this is the one true copy; nothing else keeps its own.
      */
     void SetNvMultiviewToggleState(uint32_t NumViews, bool IndependentMask) {
-      Logger::warn(str::format("[SMP-DIAG-VIEWS] t=", smpDiagNowMs(),
-                               " main-thread count -> ", NumViews));
       m_nvMultiviewNumViews = NumViews;
       m_nvMultiviewIndependentMask = IndependentMask;
     }
@@ -118,12 +108,6 @@ namespace dxvk {
 
     bool GetNvMultiviewIndependentMask() const {
       return m_nvMultiviewIndependentMask;
-    }
-
-    uint64_t GetAndResetSmpDiagDrawCount() {
-      auto c = m_smpDiagDrawCount;
-      m_smpDiagDrawCount = 0u;
-      return c;
     }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(
@@ -1298,8 +1282,6 @@ namespace dxvk {
   private:
     uint32_t m_nvMultiviewNumViews = 1u;
     bool m_nvMultiviewIndependentMask = false;
-
-    uint64_t m_smpDiagDrawCount = 0u;
 
     // True if the currently-bound geometry shader is one WE injected via
     // the NV multiview auto-attach path, rather than something the app

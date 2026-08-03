@@ -8,18 +8,7 @@
 #include "d3d11_context_def.h"
 #include "d3d11_cuda.h"
 
-#include "../util/log/log.h"
-
-#include <type_traits>
-
 namespace dxvk {
-  
-  // H4A TEST — local timestamp helper, matching dxvk_queue.cpp's convention.
-  // TEMPORARY — revert once H4a is confirmed or fully killed.
-  static int64_t smpDiagSmvNowMs() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count();
-  }
   
   template<typename ContextType>
   D3D11DeviceContextExt<ContextType>::D3D11DeviceContextExt(
@@ -31,10 +20,7 @@ namespace dxvk {
   template <typename ContextType>
   void STDMETHODCALLTYPE D3D11DeviceContextExt<ContextType>::SetMultiviewModeNV(
       uint32_t NumViews, BOOL IndependentViewportMask) {
-    Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " ENTER (before lock) this=", (void*)this));
-    Logger::warn(str::format("[SMP-DIAG-CALLER] retaddr=", __builtin_return_address(0)));
     D3D10DeviceLock lock = m_ctx->LockContext();
-    Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " LOCK ACQUIRED this=", (void*)this));
 
     // ~44% of iRacing's calls are redundant no-op re-sets (recon, handoff
     // section 3): dedupe under the context lock, before the CS stream.
@@ -45,40 +31,16 @@ namespace dxvk {
     if (NumViews == m_ctx->GetNvMultiviewNumViews() &&
         bool(IndependentViewportMask) ==
             m_ctx->GetNvMultiviewIndependentMask()) {
-      Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " EARLY-EXIT (redundant no-op) this=", (void*)this));
       return;
     }
 
     m_ctx->SetNvMultiviewToggleState(NumViews, bool(IndependentViewportMask));
-
-    // Budgeted evidence: a handful of transitions per session, not 24k.
-    static std::atomic<int32_t> s_logBudget = {8};
-
-    if (s_logBudget.fetch_sub(1, std::memory_order_relaxed) > 0) {
-      Logger::info(str::format("SetMultiviewModeNV: numViews=", NumViews,
-                               " independentMask=", IndependentViewportMask,
-                               " (forwarded to CS)"));
-    }
 
     m_ctx->EmitCs(
         [cNumViews = NumViews,
          cIndependentMask = bool(IndependentViewportMask)](DxvkContext *ctx) {
           ctx->setNvMultiviewState(cNumViews, cIndependentMask);
         });
-
-    // H3 TEST 2 (THREAD_B_H3_PLAN.md) — forced-sync probe. Only compiles/runs
-    // for the immediate context, since SynchronizeCsThread doesn't exist on
-    // the deferred context. Closes the two-whiteboard window immediately
-    // after every genuine (non-redundant) count change, before anything
-    // else gets queued against the new value. TEMPORARY — revert after
-    // reading the result, per BUILD_TEST_REVERT_WORKFLOW.md.
-    if constexpr (std::is_same_v<ContextType, D3D11ImmediateContext>) {
-      Logger::warn(str::format("[SMP-DIAG-H3SYNC] ENTER this=", (void*)this));
-      m_ctx->SynchronizeCsThread(DxvkCsThread::SynchronizeAll);
-      Logger::warn(str::format("[SMP-DIAG-H3SYNC] EXIT this=", (void*)this));
-    }
-
-    Logger::warn(str::format("[SMP-DIAG-SMV] t=", smpDiagSmvNowMs(), " EXIT (normal) this=", (void*)this));
   }
 
   template<typename ContextType>

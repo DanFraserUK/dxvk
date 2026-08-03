@@ -1031,7 +1031,6 @@ namespace dxvk {
     draw.firstVertex = StartVertexLocation;
     draw.firstInstance = 0u;
 
-    m_smpDiagDrawCount++;
     BatchDraw(draw);
   }
 
@@ -1053,7 +1052,6 @@ namespace dxvk {
     draw.vertexOffset  = BaseVertexLocation;
     draw.firstInstance = 0u;
 
-    m_smpDiagDrawCount++;
     BatchDrawIndexed(draw);
   }
 
@@ -1443,9 +1441,6 @@ namespace dxvk {
           m_parent, commonShader->GetShaderKey(), liveNumViews,
           irShader->getShaderCreateInfo().nvMultiview);
 
-        Logger::warn(str::format(
-            "[SMP-DIAG-AUTOATTACH] shader=", dxvkShader->debugName(),
-            " liveNumViews=", liveNumViews, " ampGs=", ampGs.ptr()));
         EmitCs([cShader = ampGs](DxvkContext *ctx) {
           ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(
               Rc<DxvkShader>(cShader));
@@ -2535,14 +2530,6 @@ namespace dxvk {
     const D3D11_VIEWPORT*                   pViewports) {
     D3D10DeviceLock lock = LockContext();
 
-    {
-      static std::atomic<uint64_t> s_smpDiagViewportCalls{0};
-      uint64_t n =
-          s_smpDiagViewportCalls.fetch_add(1, std::memory_order_relaxed) + 1;
-      Logger::info(str::format("[SMP-DIAG-VIEWPORTSET] count=", n,
-                               " numViewports=", NumViewports));
-    }
-
     if (unlikely(NumViewports > m_state.rs.viewports.size()))
       return;
 
@@ -3607,7 +3594,6 @@ namespace dxvk {
   template <typename ContextType>
   void D3D11CommonContext<ContextType>::BatchDraw(
       const VkDrawIndirectCommand &draw) {
-    m_smpDiagDrawCount++;
 
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
@@ -3635,7 +3621,6 @@ namespace dxvk {
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BatchDrawIndexed(
     const VkDrawIndexedIndirectCommand&     draw) {
-    m_smpDiagDrawCount++;
 
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
@@ -4125,11 +4110,8 @@ namespace dxvk {
                                                        const FLOAT Color[4],
                                                        const D3D11_RECT *pRects,
                                                        UINT NumRects) {
-    Logger::warn(str::format("[SMP-DIAG-CIV] ENTER obj=", (void *)this,
-                             " mainThreadViews=", m_nvMultiviewNumViews));
     // 3D views are unsupported
     if (View->info().viewType == VK_IMAGE_VIEW_TYPE_3D) {
-      Logger::warn(str::format("[SMP-DIAG-CIV] EARLY-EXIT (3D skip) obj=", (void*)this));
       return;
     }
 
@@ -4175,8 +4157,6 @@ namespace dxvk {
           }
         });
 
-    Logger::warn(str::format("[SMP-DIAG-CIV] MID (queued to CS) obj=", (void*)this));
-
     if (NumRects) {
       for (uint32_t i = 0; i < NumRects; i++) {
         D3D11_RECT subsampledRect = pRects[i];
@@ -4195,7 +4175,6 @@ namespace dxvk {
       vkRect->offset = VkOffset2D { 0, 0 };
       vkRect->extent = extent2D;
     }
-    Logger::warn(str::format("[SMP-DIAG-CIV] EXIT obj=", (void*)this));
   }
 
   template<typename ContextType>

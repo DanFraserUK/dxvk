@@ -7,20 +7,6 @@
 
 namespace dxvk {
 
-  // TEMPDIAG2: millisecond timestamp helper, for measuring real elapsed time
-  // around the three infinite-timeout vkAcquireNextImageKHR calls below.
-  static int64_t tempdiag2_now_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count();
-  }
-
-  // H4A TEST — local timestamp helper, matching dxvk_queue.cpp's convention.
-  // TEMPORARY — revert once H4a is confirmed or fully killed.
-  static int64_t smpDiagPresenterNowMs() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count();
-  }
-
   const std::array<std::pair<VkColorSpaceKHR, VkColorSpaceKHR>, 2> Presenter::s_colorSpaceFallbacks = {{
     { VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, VK_COLOR_SPACE_HDR10_ST2084_EXT },
     { VK_COLOR_SPACE_HDR10_ST2084_EXT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT },
@@ -115,15 +101,9 @@ namespace dxvk {
 
       waitForSwapchainFence(sync);
 
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " vkAcquireNextImageKHR ENTER (path 1) swapchain=", (void*)m_swapchain));
-
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         sync.acquire, VK_NULL_HANDLE, &m_imageIndex);
-
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " vkAcquireNextImageKHR DONE  (path 1) status=", m_acquireStatus));
     }
 
     // This is a normal occurence, but may be useful for
@@ -145,15 +125,9 @@ namespace dxvk {
 
       PresenterSync sync = m_semaphores.at(m_frameIndex);
 
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " vkAcquireNextImageKHR ENTER (path 2, post-recreate) swapchain=", (void*)m_swapchain));
-
       m_acquireStatus = m_vkd->vkAcquireNextImageKHR(m_vkd->device(),
         m_swapchain, std::numeric_limits<uint64_t>::max(),
         sync.acquire, VK_NULL_HANDLE, &m_imageIndex);
-
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " vkAcquireNextImageKHR DONE  (path 2, post-recreate) status=", m_acquireStatus));
 
       if (m_acquireStatus < 0) {
         Logger::info(str::format("Presenter: Got ", m_acquireStatus, " from fresh swapchain"));
@@ -233,16 +207,8 @@ namespace dxvk {
       fenceInfo.pNext = const_cast<void*>(std::exchange(info.pNext, &fenceInfo));
     }
 
-    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(),
-                             "]: PRESENT about to call vkQueuePresentKHR"
-                             " frameId=",
-                             frameId, " imageIndex=", m_imageIndex,
-                             " frameIndexSlot=", m_frameIndex));
     VkResult status = m_vkd->vkQueuePresentKHR(
         m_device->queues().graphics.queueHandle, &info);
-    Logger::info(str::format("TEMPDIAG2[", tempdiag2_now_ms(),
-                             "]: PRESENT returned, status=", status,
-                             " imageIndex=", m_imageIndex));
 
     // Maintain valid state if presentation succeeded, even if we want to
     // recreate the swapchain. Spec says that 'queue' operations, i.e. the
@@ -1228,39 +1194,24 @@ namespace dxvk {
 
 
   void Presenter::destroySwapchain() {
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " destroySwapchain ENTER hasMaintenance1=", m_hasSwapchainMaintenance1));
 
     // Without present fence support, waiting for the queue or device to go idle
     // is the only way to properly synchronize swapchain teardown. Care must be
     // taken not to call this method while the submission queue is locked.
     if (!m_hasSwapchainMaintenance1) {
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " device waitForIdle ENTER"));
       m_device->waitForIdle();
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " device waitForIdle DONE"));
     }
 
     // Wait for the presentWait worker to finish using
     // the swapchain before destroying it.
     std::unique_lock lock(m_frameMutex);
 
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " frameDrain ENTER queueSize=", m_frameQueue.size()));
-
     m_frameDrain.wait(lock, [this] {
       return m_frameQueue.empty();
     });
 
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " frameDrain DONE"));
-
     for (auto& sem : m_semaphores)
       waitForSwapchainFence(sem);
-
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " destroying per-image sync objects, count=", m_semaphores.size()));
 
     for (const auto& sem : m_semaphores) {
       m_vkd->vkDestroySemaphore(m_vkd->device(), sem.acquire, nullptr);
@@ -1268,19 +1219,9 @@ namespace dxvk {
       m_vkd->vkDestroyFence(m_vkd->device(), sem.fence, nullptr);
     }
 
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " sync objects destroyed"));
-
     // The conditional is here because some third party layers don't properly handle null swapchains
     if (m_swapchain) {
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " vkDestroySwapchainKHR ENTER"));
       m_vkd->vkDestroySwapchainKHR(m_vkd->device(), m_swapchain, nullptr);
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " vkDestroySwapchainKHR DONE"));
-    } else {
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " m_swapchain already null, skipping vkDestroySwapchainKHR"));
     }
 
     m_images.clear();
@@ -1299,9 +1240,6 @@ namespace dxvk {
 
     m_hasPresentId = false;
     m_hasPresentWait = false;
-
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " destroySwapchain EXIT"));
   }
 
 
@@ -1322,19 +1260,11 @@ namespace dxvk {
   void Presenter::waitForSwapchainFence(
           PresenterSync&            sync) {
     if (!sync.fenceSignaled) {
-      Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-          " fence not signaled, skipping"));
       return;
     }
 
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " WAIT enter fence=", (void*)sync.fence));
-
     VkResult vr = m_vkd->vkWaitForFences(m_vkd->device(),
       1, &sync.fence, VK_TRUE, ~0ull);
-
-    Logger::warn(str::format("[SMP-DIAG-SYNC3] t=", smpDiagPresenterNowMs(),
-        " WAIT done  fence=", (void*)sync.fence, " status=", vr));
 
     if (vr)
       Logger::err(str::format("Presenter: Failed to wait for WSI fence: ", vr));
