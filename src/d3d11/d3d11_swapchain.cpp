@@ -396,13 +396,11 @@ namespace dxvk {
     if (status != VK_SUCCESS && m_latency)
       m_latency->discardTimings();
 
-    if (status < 0) {
+    if (status < 0)
       return E_FAIL;
-    }
 
-    if (status == VK_NOT_READY) {
+    if (status == VK_NOT_READY)
       return DXGI_STATUS_OCCLUDED;
-    }
 
     m_frameId += 1;
 

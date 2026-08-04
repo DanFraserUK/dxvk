@@ -9,6 +9,7 @@ namespace dxvk {
 
   const std::array<std::pair<VkColorSpaceKHR, VkColorSpaceKHR>, 2> Presenter::s_colorSpaceFallbacks = {{
     { VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, VK_COLOR_SPACE_HDR10_ST2084_EXT },
+
     { VK_COLOR_SPACE_HDR10_ST2084_EXT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT },
   }};
 
@@ -96,6 +97,7 @@ namespace dxvk {
 
     updateSwapChain();
 
+    // Don't acquire if we already did so after present
     if (m_acquireStatus == VK_NOT_READY && m_swapchain) {
       PresenterSync sync = m_semaphores.at(m_frameIndex);
 
@@ -208,7 +210,7 @@ namespace dxvk {
     }
 
     VkResult status = m_vkd->vkQueuePresentKHR(
-        m_device->queues().graphics.queueHandle, &info);
+      m_device->queues().graphics.queueHandle, &info);
 
     // Maintain valid state if presentation succeeded, even if we want to
     // recreate the swapchain. Spec says that 'queue' operations, i.e. the
@@ -1194,13 +1196,11 @@ namespace dxvk {
 
 
   void Presenter::destroySwapchain() {
-
     // Without present fence support, waiting for the queue or device to go idle
     // is the only way to properly synchronize swapchain teardown. Care must be
     // taken not to call this method while the submission queue is locked.
-    if (!m_hasSwapchainMaintenance1) {
+    if (!m_hasSwapchainMaintenance1)
       m_device->waitForIdle();
-    }
 
     // Wait for the presentWait worker to finish using
     // the swapchain before destroying it.
@@ -1220,9 +1220,8 @@ namespace dxvk {
     }
 
     // The conditional is here because some third party layers don't properly handle null swapchains
-    if (m_swapchain) {
+    if (m_swapchain)
       m_vkd->vkDestroySwapchainKHR(m_vkd->device(), m_swapchain, nullptr);
-    }
 
     m_images.clear();
     m_semaphores.clear();
@@ -1259,9 +1258,8 @@ namespace dxvk {
 
   void Presenter::waitForSwapchainFence(
           PresenterSync&            sync) {
-    if (!sync.fenceSignaled) {
+    if (!sync.fenceSignaled)
       return;
-    }
 
     VkResult vr = m_vkd->vkWaitForFences(m_vkd->device(),
       1, &sync.fence, VK_TRUE, ~0ull);

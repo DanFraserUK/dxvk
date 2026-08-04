@@ -102,11 +102,12 @@ namespace dxvk {
     waitInfo.semaphoreCount = 1;
     waitInfo.pSemaphores = &m_semaphore;
     waitInfo.pValues = &value;
+    VkResult vr = m_vkd->vkWaitSemaphores(
+      m_vkd->device(), &waitInfo, ~0ull);
 
-    VkResult vr = m_vkd->vkWaitSemaphores(m_vkd->device(), &waitInfo, ~0ull);
-
-    if (vr != VK_SUCCESS)
+    if (vr != VK_SUCCESS) {
       Logger::err(str::format("Failed to wait for semaphore: ", vr));
+    }
   }
 
   void DxvkFence::run() {
