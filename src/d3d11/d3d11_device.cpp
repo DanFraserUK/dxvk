@@ -3374,8 +3374,10 @@ namespace dxvk {
       switch (sem.Type) {
         case 2u: { // NV_VIEWPORT_MASK_SEMANTIC
           for (auto e = outputSignature.begin(); e != outputSignature.end(); e++) {
-            if (e->matches(sem.Name))
+            if (e->matches(sem.Name)) {
               result.viewportMaskReg = e->getRegisterIndex();
+              result.viewportMaskType[0] = e->getVectorType();
+            }
           }
           msg << " mask->o" << result.viewportMaskReg;
         } break;

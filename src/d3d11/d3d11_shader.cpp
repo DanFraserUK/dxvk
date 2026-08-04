@@ -61,7 +61,6 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
 
       auto instanceId = builder.add(ir::Op::InputLoad(
         ir::ScalarType::eU32, instanceIdDecl, ir::SsaDef()));
-      builder.add(ir::Op::OutputStore(viewportDecl, ir::SsaDef(), instanceId));
 
       // NEW: the real position output, declared once, up front.
       auto positionOutDecl = builder.add(ir::Op::DclOutputBuiltIn(
@@ -149,6 +148,71 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         }
       }
 
+      // M4.E: viewport routing. iRacing packs two 16-bit viewport bitmasks
+      // per register - NV_VIEWPORT_MASK holds views 0 and 1, and
+      // NV_VIEWPORT_MASK_2 holds views 2 and 3, low half first. Only the
+      // .x component carries routing; .yzw are written with the same value
+      // and their purpose is unknown, so they are ignored.
+      static const std::array<const char*, 2> s_viewportMaskSemanticNames = {{
+        "NV_VIEWPORT_MASK", "NV_VIEWPORT_MASK_2_SEMANTIC" }};
+
+      std::array<ir::SsaDef, 2u> maskRegValues = { };
+
+      for (uint32_t m = 0u; m < 2u; m++) {
+        int32_t reg = m ? m_nvMultiview.viewportMask2Reg
+                        : m_nvMultiview.viewportMaskReg;
+
+        if (reg < 0)
+          continue;
+
+        auto maskType = m_nvMultiview.viewportMaskType[m];
+
+        auto maskDecl = builder.add(ir::Op::DclInput(
+          ir::Type(maskType).addArrayDimension(3u),
+          entryPoint, uint32_t(reg), 0u));
+        builder.add(ir::Op::Semantic(maskDecl, 0u, s_viewportMaskSemanticNames[m]));
+
+        // Viewport routing is per-primitive, so the provoking vertex's
+        // copy decides for the whole triangle.
+        auto maskVector = builder.add(ir::Op::InputLoad(
+          ir::Type(maskType), maskDecl, builder.makeConstant(0u)));
+
+        maskRegValues[m] = builder.add(ir::Op::CompositeExtract(
+          ir::ScalarType::eU32, maskVector, builder.makeConstant(0u)));
+      }
+
+      // This invocation's 16-bit half, chosen with the same IEq/Select
+      // chain shape the positions use. Register = view >> 1, half = view & 1.
+      ir::SsaDef viewportMaskHalf = { };
+
+      for (uint32_t view = 0u; view < 4u; view++) {
+        if (!maskRegValues[view >> 1])
+          continue;
+
+        auto half = builder.add(ir::Op::UBitExtract(
+          ir::ScalarType::eU32, maskRegValues[view >> 1],
+          builder.makeConstant((view & 1u) * 16u),
+          builder.makeConstant(16u)));
+
+        if (!viewportMaskHalf) {
+          viewportMaskHalf = half;
+          continue;
+        }
+
+        auto isThisView = builder.add(ir::Op::IEq(
+          ir::ScalarType::eBool, instanceId, builder.makeConstant(view)));
+        viewportMaskHalf = builder.add(ir::Op::Select(
+          ir::Type(ir::ScalarType::eU32), isThisView, half, viewportMaskHalf));
+      }
+
+      // M4.E marker. Cold path, once per synthesised shader. Says whether
+      // the mask read was wired up for this shader shape; the mask VALUES
+      // are draw-time data and can't be known here (guide 5.6 §5.0.2).
+      Logger::info(str::format("NvMultiview: M4.E ", debugName,
+        ": maskReg=o", m_nvMultiview.viewportMaskReg,
+        " mask2Reg=o", m_nvMultiview.viewportMask2Reg,
+        " routing=", viewportMaskHalf ? "mask" : "instanceId"));
+
       // Compute each corner's chosen position (same Select/IEq logic as
       // before) and stash it per-corner, instead of writing it to the
       // output immediately — same reasoning as the passthrough loop above.
@@ -170,10 +234,32 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         chosenPositionPerVertex[v] = chosen;
       }
 
-      // THE ACTUAL FIX: one corner at a time — write every output for
-      // this corner, THEN emit, THEN move to the next corner. This is
-      // the store -> emit -> store -> emit -> store -> emit pattern a
-      // geometry shader actually requires.
+      // Only the lowest set bit of the mask is honoured, because
+      // ViewportIndex takes a single index. iRacing names exactly one
+      // viewport per view, so nothing is lost here; landing one primitive
+      // on several viewports at once needs ViewportMaskNV, which is M5.
+      ir::SsaDef viewportIndex = instanceId;
+      ir::SsaDef shouldEmit = builder.makeConstant(true);
+
+      if (viewportMaskHalf) {
+        viewportIndex = builder.add(ir::Op::IFindLsb(
+          ir::Type(ir::ScalarType::eU32), viewportMaskHalf));
+        shouldEmit = builder.add(ir::Op::INe(
+          ir::Type(ir::ScalarType::eBool), viewportMaskHalf, builder.makeConstant(0u)));
+      }
+
+      // iRacing masks a view off entirely when the configuration doesn't
+      // use it - view 3 at three screens. Skip it rather than emitting the
+      // degenerate geometry its -1,-1,-1,-1 position sentinel would give.
+      // The ViewportIndex store lives inside the guard because IFindLsb(0)
+      // is -1, which is out of range for a viewport index.
+      auto emitGuard = builder.add(ir::Op::ScopedIf(ir::SsaDef(), shouldEmit));
+
+      builder.add(ir::Op::OutputStore(viewportDecl, ir::SsaDef(), viewportIndex));
+
+      // One corner at a time - write every output for this corner, THEN
+      // emit, THEN move to the next corner. This is the store -> emit
+      // pattern a geometry shader requires.
       for (uint32_t v = 0u; v < 3u; v++) {
         for (size_t i = 0u; i < passthroughOutDecls.size(); i++) {
           builder.add(ir::Op::OutputStore(
@@ -183,6 +269,10 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         builder.add(ir::Op::OutputStore(positionOutDecl, ir::SsaDef(), chosenPositionPerVertex[v]));
         builder.add(ir::Op::EmitVertex(0u));
       }
+
+      auto emitGuardEnd = builder.add(ir::Op::ScopedEndIf(emitGuard));
+      builder.rewriteOp(emitGuard,
+        ir::Op(builder.getOp(emitGuard)).setOperand(0u, emitGuardEnd));
     }
 
     uint32_t determineResourceIndex(
