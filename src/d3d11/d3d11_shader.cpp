@@ -167,6 +167,11 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
 
         auto maskType = m_nvMultiview.viewportMaskType[m];
 
+        // A register with no recorded type would build an array-of-void
+        // declaration. Skip rather than emit something malformed.
+        if (maskType.isVoidType())
+          continue;
+
         auto maskDecl = builder.add(ir::Op::DclInput(
           ir::Type(maskType).addArrayDimension(3u),
           entryPoint, uint32_t(reg), 0u));
