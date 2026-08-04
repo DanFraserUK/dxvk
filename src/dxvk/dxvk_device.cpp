@@ -651,7 +651,8 @@ namespace dxvk {
     return result;
   }
 
-  void DxvkDevice::waitForFence(sync::Fence &fence, uint64_t value) {
+
+  void DxvkDevice::waitForFence(sync::Fence& fence, uint64_t value) {
     if (fence.value() >= value)
       return;
 
@@ -665,6 +666,7 @@ namespace dxvk {
     m_statCounters.addCtr(DxvkStatCounter::GpuSyncCount, 1);
     m_statCounters.addCtr(DxvkStatCounter::GpuSyncTicks, us.count());
   }
+
 
   void DxvkDevice::waitForResource(const DxvkPagedResource& resource, DxvkAccess access) {
     if (resource.isInUse(access)) {
