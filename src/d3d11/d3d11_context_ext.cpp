@@ -39,7 +39,7 @@ namespace dxvk {
 
     m_ctx->EmitCs(
         [cNumViews = NumViews,
-         cIndependentMask = bool(IndependentViewportMask)](DxvkContext *ctx) {
+         cIndependentMask = bool(IndependentViewportMask)](DxvkContext* ctx) {
           ctx->setNvMultiviewState(cNumViews, cIndependentMask);
         });
   }

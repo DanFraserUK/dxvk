@@ -1446,7 +1446,7 @@ namespace dxvk {
         // geometry shader and invalidates pipeline state, thousands of
         // times per frame.
         if (!m_nvAmpGsAutoAttached || m_nvAmpGsBound != ampGs.ptr()) {
-          EmitCs([cShader = ampGs](DxvkContext *ctx) {
+          EmitCs([cShader = ampGs](DxvkContext* ctx) {
             ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(
                 Rc<DxvkShader>(cShader));
           });
@@ -1462,7 +1462,7 @@ namespace dxvk {
         // own real GS in the meantime; if it had, GSSetShader's own
         // normal bind already replaced whatever we injected, correctly,
         // through the ordinary pathway.)
-        EmitCs([](DxvkContext *ctx) {
+        EmitCs([](DxvkContext* ctx) {
           ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(Rc<DxvkShader>());
         });
         m_nvAmpGsAutoAttached = false;

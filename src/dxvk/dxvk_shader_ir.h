@@ -18,74 +18,77 @@
 namespace dxvk {
 
   /**
-   * \brief One pass-through IO register for the M4.C amplification GS
+   * \brief One pass-through IO register for the amplification GS
    *
    * Caught once, at VS creation time, from the same output-signature
    * walk that resolves NV custom semantics - never the NV interop
    * registers themselves (position-view family, viewport masks), only
    * the plain registers a rasterizer/PS reads.
    */
-struct DxvkNvPassthroughIoEntry {
-  uint32_t regIndex = 0u;
-  dxbc_spv::ir::BasicType type = dxbc_spv::ir::BasicType();
-  std::string semanticName = {};
-  uint32_t semanticIndex = 0u;
-  /// First written component. Two signature entries can share a register
-  /// with different write masks; both need this to be declared correctly.
-  uint32_t component = 0u;
-};
+  struct DxvkNvPassthroughIoEntry {
+    uint32_t                 regIndex      = 0u;
+    dxbc_spv::ir::BasicType  type          = dxbc_spv::ir::BasicType();
+    std::string              semanticName  = { };
+    uint32_t                 semanticIndex = 0u;
+    /// First written component. Two signature entries can share a register
+    /// with different write masks; both need this to be declared correctly.
+    uint32_t                 component     = 0u;
+  };
 
-/**
- * \brief NVAPI multi-view semantic mapping
- *
- * Output registers resolved from the DXBC output signature of a shader
- * created through the NVAPI extended entry points (dxvk-nvapi interop).
- * View 0's position is SV_POSITION; views 1-3 ride the
- * NV_POSITION_VIEW_{1,2,3}_SEMANTIC outputs. Register indices are -1
- * when the corresponding output is not present. Trivially copyable and
- * padding-free by construction: hash() and eq() operate on raw bytes.
- */
-struct DxvkNvMultiviewInfo {
-  std::array<int32_t, 3> positionViewReg = {-1, -1, -1};
-  /// Data type of each register above, the index alone isn't enough
-  /// to declare a matching GS input for it.
-  std::array<dxbc_spv::ir::BasicType, 3> positionViewType = {};
-  int32_t viewportMaskReg = -1;
-  int32_t viewportMask2Reg = -1;
-  /// Data type of the two registers above, same reasoning as
-  /// positionViewType.
-  std::array<dxbc_spv::ir::BasicType, 2> viewportMaskType = {};
-  uint32_t useViewportMask = 0u;
 
-  bool enabled() const {
-    return positionViewReg[0] >= 0 || viewportMaskReg >= 0;
-  }
-};
+  /**
+   * \brief NVAPI multi-view semantic mapping
+   *
+   * Output registers resolved from the DXBC output signature of a shader
+   * created through the NVAPI extended entry points (dxvk-nvapi interop).
+   * View 0's position is SV_POSITION; views 1-3 ride the
+   * NV_POSITION_VIEW_{1,2,3}_SEMANTIC outputs. Register indices are -1
+   * when the corresponding output is not present. Trivially copyable, and
+   * hashed by raw bytes: hash() and eq() operate on the whole struct, so
+   * the static_assert below pins the layout.
+   */
+  struct DxvkNvMultiviewInfo {
+    std::array<int32_t, 3> positionViewReg = { -1, -1, -1 };
+    /// Data type of each register above, the index alone isn't enough
+    /// to declare a matching GS input for it.
+    std::array<dxbc_spv::ir::BasicType, 3> positionViewType = { };
+    int32_t viewportMaskReg = -1;
+    int32_t viewportMask2Reg = -1;
+    /// Data type of the two registers above, same reasoning as
+    /// positionViewType.
+    std::array<dxbc_spv::ir::BasicType, 2> viewportMaskType = { };
+    uint32_t useViewportMask = 0u;
 
-static_assert(sizeof(DxvkNvMultiviewInfo) == 32u);
+    bool enabled() const {
+      return positionViewReg[0] >= 0 || viewportMaskReg >= 0;
+    }
+  };
 
-/**
- * \brief IR shader properties
- *
- * Stores some metadata that cannot be inferred from
- * the IR, as well as some binding model mappings.
- */
-struct DxvkIrShaderCreateInfo {
-  /// Shader compile options
-  DxvkShaderOptions options;
-  /// Mask of user input locations to enable flat shading for
-  uint32_t flatShadingInputs = 0u;
-  /// Rasterized geometry stream
-  int32_t rasterizedStream = 0;
-  /// NVAPI multi-view semantic mapping (dxvk-nvapi interop)
-  DxvkNvMultiviewInfo nvMultiview = {};
-  /// Streamout parameters
-  small_vector<dxbc_spv::ir::IoXfbInfo, 8u> xfbEntries = {};
+  static_assert(sizeof(DxvkNvMultiviewInfo) == 32u);
 
-  size_t hash() const;
 
-  bool eq(const DxvkIrShaderCreateInfo &other) const;
-};
+  /**
+   * \brief IR shader properties
+   *
+   * Stores some metadata that cannot be inferred from
+   * the IR, as well as some binding model mappings.
+   */
+  struct DxvkIrShaderCreateInfo {
+    /// Shader compile options
+    DxvkShaderOptions options;
+    /// Mask of user input locations to enable flat shading for
+    uint32_t flatShadingInputs = 0u;
+    /// Rasterized geometry stream
+    int32_t rasterizedStream = 0;
+    /// NVAPI multi-view semantic mapping (dxvk-nvapi interop)
+    DxvkNvMultiviewInfo nvMultiview = { };
+    /// Streamout parameters
+    small_vector<dxbc_spv::ir::IoXfbInfo, 8u> xfbEntries = { };
+
+    size_t hash() const;
+
+    bool eq(const DxvkIrShaderCreateInfo& other) const;
+  };
 
   /**
    * \brief Raw shader binary for dxbc-spirv
