@@ -1388,27 +1388,22 @@ namespace dxvk {
       BindShader<D3D11ShaderType::eVertex>(GetCommonShader(shader));
     }
 
-    // M4.C (T-C): if this VS carries NV multi-view metadata, the live
-    // toggle says multi-view is truly on right now (not just true at
-    // shader-creation time - iRacing tags shaders with this metadata
-    // no matter the toggle, so checking the metadata alone would fire
-    // the broadcast in single-screen play too), and the app has NOT
-    // bound its own GS, quietly attach the built broadcast GS. If the
-    // app HAS bound a GS (the 15 vpMask=1 shaders), it already carries
-    // its own nvMultiview metadata and broadcasting it is T-C.2 -
-    // untouched here.
+    // If this VS carries NV multi-view metadata, the live toggle says
+    // multi-view is on right now, and the application has not bound its
+    // own geometry shader, attach the synthesised broadcast GS.
     //
-    // This block used to only ever ACT when the multiview condition
-    // was true - binding the companion GS with nothing to undo the
-    // bind later. Any subsequent draw using a VS without multiview
-    // metadata silently kept whatever companion GS was last injected,
-    // corrupting completely unrelated draws for the rest of the frame.
-    // Real D3D11 GSSetShader never has this problem, because every
-    // call to it explicitly and unconditionally decides the full
-    // state - bind X, or bind NULL, never "leave it as it was". This
-    // block now does the same: resolve the intended state on every
-    // single VSSetShader call, and always emit whatever that decision
-    // requires, including clearing our own earlier injection.
+    // The live toggle matters: applications may tag shaders with this
+    // metadata regardless of the toggle state, so checking the metadata
+    // alone would fire the broadcast during ordinary single-screen play.
+    // Where the application has bound its own GS, that shader carries its
+    // own multiview metadata and is left alone here.
+    //
+    // Every call resolves the full intended state and emits whatever that
+    // decision requires, including clearing an earlier injection. An
+    // earlier version only acted when the multiview condition was true,
+    // which left the companion GS bound across unrelated draws for the
+    // rest of the frame. GSSetShader has the same property: it always
+    // decides the whole state rather than leaving it as it was.
     if (shader) {
       auto* commonShader = GetCommonShader(shader);
       bool hasNvMultiview = false;

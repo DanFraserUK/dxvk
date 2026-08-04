@@ -12,17 +12,17 @@
 
 namespace dxvk {
 
-  // M4.C (T-C): builds a geometry shader that never lived in
-  // iRacing's bytecode - sends one input shape out to NumViews
-  // viewports through GS instancing (SetGsInstances + gl_InvocationID),
-  // passing every plain VS output through UNCHANGED (view-0 position
-  // for every view; per-view positions are T-D's job). Scope: triangle
-  // input shape only (§0 above - matches every M4.A-marked shader;
-  // no point/line multi-view VS seen in recon).
+  // Builds a geometry shader that does not exist in the application's
+  // bytecode. It broadcasts one input primitive to NumViews viewports
+  // using GS instancing (SetGsInstances plus gl_InvocationID), selects
+  // the matching per-view position for each invocation, and routes the
+  // primitive using the viewport mask the vertex shader supplies.
+  // Triangle input only, which covers every NV multi-view vertex shader
+  // observed so far; no point or line multi-view shaders have been seen.
   //
-  // On purpose, this does NOT touch dxbc-spirv: DxvkIrShaderConverter is
-  // DXVK's own interface (dxvk_shader_ir.h) - anything that fills in an
-  // ir::Builder fits the bill, hand-built or turned from DXBC alike.
+  // Deliberately does not touch dxbc-spirv. DxvkIrShaderConverter is
+  // DXVK's own interface, so anything that fills in an ir::Builder is
+  // acceptable, whether hand-built or converted from DXBC.
   class D3D11NvAmplificationGsConverter : public DxvkIrShaderConverter {
 
   public:
@@ -62,18 +62,17 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
       auto instanceId = builder.add(ir::Op::InputLoad(
         ir::ScalarType::eU32, instanceIdDecl, ir::SsaDef()));
 
-      // NEW: the real position output, declared once, up front.
+      // The position output, declared once, up front.
       auto positionOutDecl = builder.add(ir::Op::DclOutputBuiltIn(
         ir::Type(ir::BasicType(ir::ScalarType::eF32, 4u)), entryPoint, ir::BuiltIn::ePosition));
 
-      // NEW: [view][vertex] -> that view's position value for that vertex.
-      // index 0 = view 0 (ordinary SV_POSITION, captured in the passthrough
-      // loop below); indices 1-3 = the three NV_POSITION_VIEW_* registers,
-      // captured in the second loop further down.
+      // [view][vertex] -> that view's position for that vertex. Index 0
+      // is view 0, which uses the ordinary SV_POSITION built-in; indices
+      // 1 to 3 come from the NV_POSITION_VIEW_* registers below.
       std::array<std::array<ir::SsaDef, 3u>, 4u> positionPerViewPerVertex = { };
 
       // Per-vertex pass-through: 3 input vertices (triangle), every
-      // captured entry carried through unchanged, at its OWN component
+      // captured entry carried through unchanged, at its own component
       // count (the resolver's getVectorType() - never a fixed float4).
       //
       // Location assignment: use the source register index and component
@@ -125,10 +124,8 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         passthroughValuesPerVertex.push_back(values);
       }
 
-      // Per-view custom position registers: unchanged. This part only
-      // LOADS values into positionPerViewPerVertex — it never writes to
-      // an output, so it was never affected by the re-inking bug and
-      // doesn't need to change.
+      // Per-view position registers. This only loads values into
+      // positionPerViewPerVertex; it never writes to an output.
       static const std::array<const char*, 3> s_positionViewSemanticNames = {{
         "NV_POSITION_VIEW_1_SEMANTIC", "NV_POSITION_VIEW_2_SEMANTIC", "NV_POSITION_VIEW_3_SEMANTIC" }};
 
@@ -148,7 +145,7 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         }
       }
 
-      // M4.E: viewport routing. iRacing packs two 16-bit viewport bitmasks
+      // Viewport routing. iRacing packs two 16-bit viewport bitmasks
       // per register - NV_VIEWPORT_MASK holds views 0 and 1, and
       // NV_VIEWPORT_MASK_2 holds views 2 and 3, low half first. Only the
       // .x component carries routing; .yzw are written with the same value
@@ -210,17 +207,17 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
           ir::Type(ir::ScalarType::eU32), isThisView, half, viewportMaskHalf));
       }
 
-      // M4.E marker. Cold path, once per synthesised shader. Says whether
-      // the mask read was wired up for this shader shape; the mask VALUES
-      // are draw-time data and can't be known here (guide 5.6 §5.0.2).
-      Logger::info(str::format("NvMultiview: M4.E ", debugName,
+      // Cold path, once per synthesised shader. Records whether the
+      // mask read was wired up for this shader; the mask values are
+      // draw-time data and cannot be known here.
+      Logger::info(str::format("NvMultiview: ", debugName,
         ": maskReg=o", m_nvMultiview.viewportMaskReg,
         " mask2Reg=o", m_nvMultiview.viewportMask2Reg,
         " routing=", viewportMaskHalf ? "mask" : "instanceId"));
 
-      // Compute each corner's chosen position (same Select/IEq logic as
-      // before) and stash it per-corner, instead of writing it to the
-      // output immediately — same reasoning as the passthrough loop above.
+      // Compute each corner's chosen position and stash it per-corner,
+      // rather than writing to the output immediately. Same reasoning as
+      // the passthrough loop above.
       std::array<ir::SsaDef, 3u> chosenPositionPerVertex = { };
 
       for (uint32_t v = 0u; v < 3u; v++) {
@@ -593,7 +590,6 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
     *m_nvAmplificationNumViews = NumViews;
     *m_nvAmplificationInfo = NvMultiview;
 
-    Logger::warn(str::format("[SMP-DIAG-CREATESHADER] GetOrCreateNvAmplificationGs::return *m_nvAmplificationGs; Exit ", (void*)this));
     return *m_nvAmplificationGs;
   }
 

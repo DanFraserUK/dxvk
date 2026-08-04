@@ -158,7 +158,7 @@ namespace dxvk {
     }
     
     /**
-     * \brief NV multi-view pass-through IO list (M4.C)
+     * \brief NV multi-view pass-through IO list
      *
      * Empty for shaders with no NV multi-view metadata. Filled once,
      * at creation time, from the same signature walk that resolves NV
@@ -173,7 +173,7 @@ namespace dxvk {
     }
 
     /**
-     * \brief Shader key this object was created with (M4.C)
+     * \brief Shader key this object was created with
      *
      * Nothing on DxvkShader/DxvkIrShader hands this back once creation
      * is done - kept here since GetOrCreateNvAmplificationGs needs it.
@@ -185,13 +185,13 @@ namespace dxvk {
     /**
      * \brief Gets or builds (only when needed) this VS's NV multi-view broadcast GS
      *
-     * M4.C (T-C): only means something when this shader is a vertex
-     * shader with nvMultiview metadata and no app-bound GS. Built once;
-     * shared by every copy of this object (see the shared_ptr cache
-     * slot below - D3D11ShaderModuleSet::GetShaderModule, pre-existing
-     * DXVK code, hands this object back by copy on both a cache hit and
-     * a cache miss, so the cache slot itself has to be something a copy
-     * can still share, the same reasoning as the mutex right below it).
+     * Only meaningful when this shader is a vertex shader with
+     * nvMultiview metadata and no application-bound geometry shader.
+     * Built once and shared by every copy of this object. The cache slot
+     * below is a shared_ptr because D3D11ShaderModuleSet::GetShaderModule
+     * returns this object by copy on both a hit and a miss, so the slot
+     * has to be something a copy can still share; same reasoning as the
+     * mutex beside it.
      */
     Rc<DxvkShader> GetOrCreateNvAmplificationGs(
           D3D11Device*            pDevice,

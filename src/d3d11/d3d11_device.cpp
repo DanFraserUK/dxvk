@@ -817,7 +817,6 @@ namespace dxvk {
     const DxvkNvMultiviewInfo&    NvMultiview,
           std::vector<DxvkNvPassthroughIoEntry> PassthroughIo,
           ID3D11VertexShader**    ppVertexShader) {
-    Logger::warn(str::format("[SMP-DIAG] CreateVertexShaderNvMultiview ENTER this=", (void*)this));
 
     InitReturnPtr(ppVertexShader);
     D3D11CommonShader module;
@@ -831,23 +830,17 @@ namespace dxvk {
       pShaderBytecode, BytecodeLength, moduleInfo);
 
     if (FAILED(hr)) {
-      Logger::warn(
-          str::format("[SMP-DIAG] CreateVertexShaderNvMultiview FAIL hr=0x",
-                      std::hex, hr, std::dec, " this=", (void *)this));
       return hr;
     }
 
     module.SetNvPassthroughIo(std::move(PassthroughIo));
 
     if (!ppVertexShader) {
-      Logger::warn(str::format(
-          "[SMP-DIAG] CreateVertexShaderNvMultiview ppVertexShader==NULL",
-          " this=", (void *)this));
       return S_FALSE;
     }
 
     *ppVertexShader = ref(new D3D11VertexShader(this, module));
-    Logger::warn(str::format("[SMP-DIAG] CreateVertexShaderNvMultiview::S_OK Exit ", (void*)this));
+
     return S_OK;
   }
 
@@ -896,19 +889,17 @@ namespace dxvk {
       pShaderBytecode, BytecodeLength, moduleInfo);
 
     if (FAILED(hr)) {
-      Logger::warn(str::format("[SMP-DIAG] CreateGeometryShaderNvMultiview::if (FAILED(hr)) Exit ", (void*)this));
       return hr;
     }
 
     module.SetNvPassthroughIo(std::move(PassthroughIo));
 
     if (!ppGeometryShader) {
-      Logger::warn(str::format("[SMP-DIAG] CreateGeometryShaderNvMultiview::if (!ppVertexShader) Exit ", (void*)this));
     return S_FALSE;
     }
 
     *ppGeometryShader = ref(new D3D11GeometryShader(this, module));
-    Logger::warn(str::format("[SMP-DIAG] CreateGeometryShaderNvMultiview::S_OK Exit ", (void*)this));
+    
     return S_OK;
   }
   
@@ -3291,13 +3282,13 @@ namespace dxvk {
   }
 
 
-  // M4.B (T-B): resolve an NVAPI custom-semantic array against the DXBC
-  // output signature. Encodes the M4.A ground truth (guide §5.3.0):
+  // Resolve an NVAPI custom-semantic array against the DXBC output
+  // signature:
   //  - type 5 (NV_POSITION): the signature carries the per-view family
-  //    NV_POSITION_VIEW_{1,2,3}_SEMANTIC; view 0's position is SV_POSITION.
-  //  - types 2 / 4 (viewport masks): request strings match exactly, u32x4.
-  //  - type 3 (NV_X_RIGHT, single-pass stereo): confirmed absent from every
-  //    iRacing signature; not part of SMP - recorded as ignored.
+  //    NV_POSITION_VIEW_{1,2,3}_SEMANTIC; view 0's position is SV_POSITION
+  //  - types 2 and 4 (viewport masks): request strings match exactly, u32x4
+  //  - types 1 and 3 (NV_X_RIGHT and NV_XYZW_RIGHT, single-pass stereo):
+  //    absent from every signature observed; recorded as ignored
   static DxvkNvMultiviewInfo ResolveNvCustomSemantics(
     const char*                         ShaderType,
     const void*                         pShaderBytecode,
@@ -3406,7 +3397,7 @@ namespace dxvk {
               << "/o" << result.positionViewReg[2];
         } break;
 
-        default: // type 3 = NV_X_RIGHT (SPS) and anything else unexpected
+        default: // type 3 = NV_XYZW_RIGHT_SEMANTIC and anything else unexpected
           msg << " " << sem.Name << "(type=" << sem.Type << ") ignored";
       }
     }
@@ -3427,17 +3418,10 @@ namespace dxvk {
     DxvkNvMultiviewInfo nv = ResolveNvCustomSemantics("VS",
       pShaderBytecode, BytecodeLength, pSemantics, NumSemantics, &passthroughIo);
 
-    Logger::warn(str::format(
-        "[SMP-DIAG] CreateVertexShaderNvSemantics ENTER enabled=", nv.enabled(),
-        " this=", (void *)m_device));
-
     if (!nv.enabled()) {
-      Logger::warn("[SMP-DIAG] CreateVertexShaderNvSemantics: nv.enabled()==false, calling CreateVertexShader");
       return m_device->CreateVertexShader(pShaderBytecode, BytecodeLength,
                                           pClassLinkage, ppVertexShader);
     }
-
-    Logger::warn("[SMP-DIAG] CreateVertexShaderNvSemantics: nv.enabled()==true, calling CreateVertexShaderNvMultiview");
 
     return m_device->CreateVertexShaderNvMultiview(
         pShaderBytecode, BytecodeLength, pClassLinkage, nv,
@@ -3460,8 +3444,8 @@ namespace dxvk {
     nv.useViewportMask = UseViewportMask ? 1u : 0u;
 
     if (!nv.enabled()) {
-      // The SPS-flavored GS family lands here (NV_X_RIGHT, no mask output):
-      // plain compile, exactly as M1-M4.A always did.
+      // Single-pass-stereo geometry shaders land here, with no mask
+      // output: plain compile.
       return m_device->CreateGeometryShader(
         pShaderBytecode, BytecodeLength, pClassLinkage, ppGeometryShader);
     }

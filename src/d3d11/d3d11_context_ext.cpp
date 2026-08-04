@@ -23,12 +23,10 @@ namespace dxvk {
       uint32_t NumViews, BOOL IndependentViewportMask) {
     D3D10DeviceLock lock = m_ctx->LockContext();
 
-    // ~44% of iRacing's calls are redundant no-op re-sets (recon, handoff
-    // section 3): dedupe under the context lock, before the CS stream.
-    // Reads the one true copy on D3D11CommonContext, not a field of
-    // its own - the Ext class already holds m_ctx, so it can read
-    // through that pointer instead of keeping a second copy that could
-    // drift out of step with it.
+    // A large share of the application's calls are redundant re-sets of
+    // the same values. Dedupe under the context lock, before the CS
+    // stream. Reads the authoritative copy on D3D11CommonContext rather
+    // than keeping a second copy here that could drift out of step.
     if (NumViews == m_ctx->GetNvMultiviewNumViews() &&
         bool(IndependentViewportMask) ==
             m_ctx->GetNvMultiviewIndependentMask()) {
