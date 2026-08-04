@@ -1441,10 +1441,18 @@ namespace dxvk {
           m_parent, commonShader->GetShaderKey(), liveNumViews,
           irShader->getShaderCreateInfo().nvMultiview);
 
-        EmitCs([cShader = ampGs](DxvkContext *ctx) {
-          ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(
-              Rc<DxvkShader>(cShader));
-        });
+        // Skip the bind if this exact shader is already the one we
+        // injected. Without this, every VSSetShader re-binds the same
+        // geometry shader and invalidates pipeline state, thousands of
+        // times per frame.
+        if (!m_nvAmpGsAutoAttached || m_nvAmpGsBound != ampGs.ptr()) {
+          EmitCs([cShader = ampGs](DxvkContext *ctx) {
+            ctx->bindShader<VK_SHADER_STAGE_GEOMETRY_BIT>(
+                Rc<DxvkShader>(cShader));
+          });
+          m_nvAmpGsBound = ampGs.ptr();
+        }
+
         m_nvAmpGsAutoAttached = true;
       } else if (m_nvAmpGsAutoAttached && !m_state.gs) {
         // We previously injected a companion GS and this draw's own

@@ -1288,6 +1288,7 @@ namespace dxvk {
     // itself bound through GSSetShader. Lets VSSetShader tell "nothing to
     // do" apart from "we need to clear our own leftover injection."
     bool m_nvAmpGsAutoAttached = false;
+    const DxvkShader* m_nvAmpGsBound = nullptr;
 
     ContextType* GetTypedContext() {
       return static_cast<ContextType*>(this);

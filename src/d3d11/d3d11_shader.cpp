@@ -469,7 +469,6 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         Logger::info(str::format("NvAmplificationGs: reusing cached companion for ",
           VsKey.toString(), " (", m_nvPassthroughIo.size(), " passthrough entries)"));
       }
-      Logger::warn(str::format("[SMP-DIAG-CREATESHADER] GetOrCreateNvAmplificationGs::if (cacheMatches) Exit ", (void*)this));
       return *m_nvAmplificationGs;
     }
 
