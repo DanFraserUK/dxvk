@@ -1,4 +1,3 @@
-#include <atomic>
 #include <vector>
 #include <utility>
 #include <cstring>
@@ -7,6 +6,8 @@
 #include "d3d11_context_imm.h"
 #include "d3d11_context_def.h"
 #include "d3d11_cuda.h"
+
+#include "../util/log/log.h"
 
 namespace dxvk {
   

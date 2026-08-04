@@ -1025,10 +1025,10 @@ namespace dxvk {
     if (unlikely(!VertexCount))
       return;
 
-    VkDrawIndirectCommand draw = {};
-    draw.vertexCount = VertexCount;
+    VkDrawIndirectCommand draw = { };
+    draw.vertexCount   = VertexCount;
     draw.instanceCount = 1u;
-    draw.firstVertex = StartVertexLocation;
+    draw.firstVertex   = StartVertexLocation;
     draw.firstInstance = 0u;
 
     BatchDraw(draw);
@@ -3599,16 +3599,15 @@ namespace dxvk {
   }
 
 
-  template <typename ContextType>
+  template<typename ContextType>
   void D3D11CommonContext<ContextType>::BatchDraw(
-      const VkDrawIndirectCommand &draw) {
-
+    const VkDrawIndirectCommand&            draw) {
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
 
     // Batch consecutive draws if there are no state changes
     if (m_csDataType == D3D11CmdType::Draw) {
-      auto *drawInfo = m_csChunk->pushData(m_csData, 1u);
+      auto* drawInfo = m_csChunk->pushData(m_csData, 1u);
 
       if (likely(drawInfo)) {
         new (drawInfo) VkDrawIndirectCommand(draw);
@@ -3616,11 +3615,10 @@ namespace dxvk {
       }
     }
 
-    EmitCsCmd<VkDrawIndirectCommand>(
-        D3D11CmdType::Draw, 1u,
-        [](DxvkContext *ctx, const VkDrawIndirectCommand *draws, size_t count) {
-          ctx->draw(count, draws);
-        });
+    EmitCsCmd<VkDrawIndirectCommand>(D3D11CmdType::Draw, 1u,
+      [] (DxvkContext* ctx, const VkDrawIndirectCommand* draws, size_t count) {
+        ctx->draw(count, draws);
+      });
 
     new (m_csData->first()) VkDrawIndirectCommand(draw);
   }
@@ -3629,7 +3627,6 @@ namespace dxvk {
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::BatchDrawIndexed(
     const VkDrawIndexedIndirectCommand&     draw) {
-
     if (unlikely(HasDirtyGraphicsBindings()))
       ApplyDirtyGraphicsBindings();
 
@@ -4113,15 +4110,16 @@ namespace dxvk {
     }
   }
 
-  template <typename ContextType>
-  void D3D11CommonContext<ContextType>::ClearImageView(Rc<DxvkImageView> View,
-                                                       const FLOAT Color[4],
-                                                       const D3D11_RECT *pRects,
-                                                       UINT NumRects) {
+
+  template<typename ContextType>
+  void D3D11CommonContext<ContextType>::ClearImageView(
+          Rc<DxvkImageView>                 View,
+    const FLOAT                             Color[4],
+    const D3D11_RECT*                       pRects,
+          UINT                              NumRects) {
     // 3D views are unsupported
-    if (View->info().viewType == VK_IMAGE_VIEW_TYPE_3D) {
+    if (View->info().viewType == VK_IMAGE_VIEW_TYPE_3D)
       return;
-    }
 
     // Convert clear value
     auto clearValue = ConvertColorValue(Color, View->formatInfo());
@@ -4137,33 +4135,27 @@ namespace dxvk {
       plane = &imageFormatInfo->planes[vk::getPlaneIndex(View->info().aspects)];
 
     // Clear all non-empty rectangles
-    EmitCsCmd<VkRect2D>(
-        D3D11CmdType::None, std::max(NumRects, 1u),
-        [cView = std::move(View), cClearValue = clearValue](
-            DxvkContext *ctx, const VkRect2D *rects, size_t count) {
-          constexpr VkImageUsageFlags rtUsage =
-              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-          VkImageAspectFlags clearAspect =
-              cView->formatInfo()->aspectMask &
-              (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT);
+    EmitCsCmd<VkRect2D>(D3D11CmdType::None, std::max(NumRects, 1u), [
+      cView       = std::move(View),
+      cClearValue = clearValue
+    ] (DxvkContext* ctx, const VkRect2D* rects, size_t count) {
+      constexpr VkImageUsageFlags rtUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      VkImageAspectFlags clearAspect = cView->formatInfo()->aspectMask & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT);
 
-          for (size_t i = 0; i < count; i++) {
-            VkOffset3D offset = {rects[i].offset.x, rects[i].offset.y, 0};
-            VkExtent3D extent = {rects[i].extent.width, rects[i].extent.height,
-                                 1u};
+      for (size_t i = 0; i < count; i++) {
+        VkOffset3D offset = { rects[i].offset.x, rects[i].offset.y, 0 };
+        VkExtent3D extent = { rects[i].extent.width, rects[i].extent.height, 1u };
 
-            if (extent.width && extent.height) {
-              bool isFullSize = cView->mipLevelExtent(0) == extent;
+        if (extent.width && extent.height) {
+          bool isFullSize = cView->mipLevelExtent(0) == extent;
 
-              if ((cView->info().usage & rtUsage) && isFullSize)
-                ctx->clearRenderTarget(cView, clearAspect, cClearValue, 0u);
-              else
-                ctx->clearImageView(cView, offset, extent, clearAspect,
-                                    cClearValue);
-            }
-          }
-        });
+          if ((cView->info().usage & rtUsage) && isFullSize)
+            ctx->clearRenderTarget(cView, clearAspect, cClearValue, 0u);
+          else
+            ctx->clearImageView(cView, offset, extent, clearAspect, cClearValue);
+        }
+      }
+    });
 
     if (NumRects) {
       for (uint32_t i = 0; i < NumRects; i++) {
@@ -4184,6 +4176,7 @@ namespace dxvk {
       vkRect->extent = extent2D;
     }
   }
+
 
   template<typename ContextType>
   void D3D11CommonContext<ContextType>::ClearBufferView(
