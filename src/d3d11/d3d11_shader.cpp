@@ -346,7 +346,7 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
           ", mask o", m_info.nvMultiview.viewportMaskReg,
           ", vpMask=", m_info.nvMultiview.useViewportMask, ")"));
       }
-      
+
       dxbc_spv::dxbc::Container container(m_dxbc.data(), m_dxbc.size());
 
       dxbc_spv::dxbc::ShaderInfo shaderInfo =

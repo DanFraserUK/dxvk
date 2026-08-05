@@ -156,7 +156,7 @@ namespace dxvk {
     Rc<DxvkShader> GetShader() const {
       return m_shader;
     }
-    
+
     /**
      * \brief NV multi-view pass-through IO list
      *

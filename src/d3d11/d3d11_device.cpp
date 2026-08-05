@@ -899,11 +899,11 @@ namespace dxvk {
     }
 
     *ppGeometryShader = ref(new D3D11GeometryShader(this, module));
-    
+
     return S_OK;
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE D3D11Device::CreateGeometryShaderWithStreamOutput(
     const void*                       pShaderBytecode,
           SIZE_T                      BytecodeLength,
@@ -3022,7 +3022,7 @@ namespace dxvk {
 
       case D3D11_VK_NVX_BINARY_IMPORT:
         return deviceFeatures.nvxBinaryImport;
-      
+
       case D3D11_VK_NV_MULTIVIEW:
         return deviceFeatures.nvViewportArray2;
 
@@ -3405,8 +3405,8 @@ namespace dxvk {
     Logger::info(msg.str());
     return result;
   }
-  
-  
+
+
   HRESULT STDMETHODCALLTYPE D3D11DeviceExt::CreateVertexShaderNvSemantics(
     const void*                     pShaderBytecode,
           SIZE_T                    BytecodeLength,
