@@ -236,10 +236,22 @@ void convertShader(dxbc_spv::ir::Builder& builder) override {
         chosenPositionPerVertex[v] = chosen;
       }
 
-      // Only the lowest set bit of the mask is honoured, because
-      // ViewportIndex takes a single index. iRacing names exactly one
-      // viewport per view, so nothing is lost here; landing one primitive
-      // on several viewports at once needs ViewportMaskNV, which is M5.
+      // ViewportIndex carries a single index, so the mask is reduced to
+      // its lowest set bit. This is exact when a view names one viewport.
+      // An empty mask skips emission entirely rather than defaulting to
+      // viewport 0.
+      //
+      // A mask naming several viewports would need the primitive
+      // broadcast to each of them, which is not implemented; the extra
+      // viewports are silently dropped. The mask is a shader value, so
+      // this cannot be detected at compile time.
+      //
+      // Two ways to support it if a caller ever needs it. Emitting the
+      // primitive once per set bit works on any implementation, at the
+      // cost of one invocation per viewport. Writing ViewportMaskNV
+      // instead does it in hardware, but requires SPV_NV_viewport_array2
+      // and so only works on Nvidia. The portable form would be the
+      // baseline, with the mask as an optimisation on top of it.
       ir::SsaDef viewportIndex = instanceId;
       ir::SsaDef shouldEmit = builder.makeConstant(true);
 
