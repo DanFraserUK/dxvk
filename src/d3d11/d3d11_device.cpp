@@ -3028,7 +3028,8 @@ namespace dxvk {
         return deviceFeatures.nvxBinaryImport;
 
       case D3D11_VK_NV_MULTIVIEW:
-        return deviceFeatures.nvViewportArray2;
+        return deviceFeatures.core.features.geometryShader
+            && deviceFeatures.core.features.multiViewport;
 
       default:
         return false;

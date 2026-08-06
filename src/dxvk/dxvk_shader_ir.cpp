@@ -38,7 +38,7 @@ namespace dxvk {
     if (std::memcmp(&nvMultiview, &other.nvMultiview, sizeof(nvMultiview)))
       return false;
 
-      if (xfbEntries.size() != other.xfbEntries.size())
+    if (xfbEntries.size() != other.xfbEntries.size())
       return false;
 
     for (size_t i = 0u; i != xfbEntries.size(); i++) {
